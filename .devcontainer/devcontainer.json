@@ -1,0 +1,9 @@
+{
+  "name": "utn-frd",
+  "dockerComposeFile": [
+    "../docker-compose.yml",
+    "../docker-compose.override.yml"
+  ],
+  "service": "web",
+  "workspaceFolder": "/workspace"
+}

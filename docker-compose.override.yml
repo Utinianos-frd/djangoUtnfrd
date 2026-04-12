@@ -1,0 +1,8 @@
+services:
+  web:
+    command: python backend/manage.py runserver 0.0.0.0:8000
+    volumes: 
+      - ./:/workspace
+      - static_volume:/workspace/static
+    ports:
+      - "8000:8000"
