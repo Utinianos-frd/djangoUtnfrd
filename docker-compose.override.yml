@@ -1,7 +1,6 @@
 services:
   web:
-    # command: python manage.py runserver 0.0.0.0:8000
-    command: sleep infinity
+    command: python manage.py runserver 0.0.0.0:8000
     volumes: 
       - ./:/workspace
       - static_volume:/workspace/static
