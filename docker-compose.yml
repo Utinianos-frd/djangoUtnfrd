@@ -4,17 +4,19 @@ services:
       context: .
       dockerfile: .devcontainer/Dockerfile
     container_name: django_web
-    command: gunicorn mi_proyecto.wsgi:application --bind 0.0.0.0:8000 --workers 3
+    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3
     volumes:
       - ./:/workspace
       - static_volume:/workspace/static
+    depends_on:
+      - postgres
   postgres:
     image: postgres:15
     container_name: django_db
     environment: 
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: django
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "5432:5432"
     volumes:
