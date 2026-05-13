@@ -8,6 +8,8 @@ services:
     volumes:
       - ./:/workspace
       - static_volume:/workspace/static
+    env_file:
+      - .env
     depends_on:
       - postgres
   postgres:
