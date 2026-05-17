@@ -19,3 +19,12 @@ def login_usuario(request):
         "ok": True,
         "message": "Login successful"
     }
+
+def auth_register(request):
+    
+    
+
+    return {
+        "ok": False,
+        "message": "Registro no implementado aún"
+    }

@@ -10,7 +10,26 @@
   "forwardPorts": [8000],
   "customizations": {
     "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "terminal.integrated.profiles.linux": {
+          "bash": {
+            "path": "/bin/bash"
+          }
+        },
+        "editor.formatOnSave": true,
+        "[python]": {
+          "editor.defaultFormatter": "ms-python.black-formatter"
+        },
+        "[sql]": {
+          "editor.defaultFormatter": "inferrinizzard.prettier-sql-vscode"
+        }
+      },
       "extensions": [
+        "Anthropic.claude-code",
+        "eamodio.gitlens",
+        "ms-python.black-formatter",
+        "inferrinizzard.prettier-sql-vscode",
         "ms-python.python",
         "ms-python.vscode-pylance",
         "ms-python.debugpy",
