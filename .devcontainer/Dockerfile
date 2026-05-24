@@ -23,11 +23,12 @@ RUN curl -fsSL https://opencode.ai/install | bash && \
     mv /root/.opencode/bin/opencode /usr/local/bin/opencode && \
     rm -rf /root/.opencode
 
+WORKDIR /workspace
+
 COPY requirements.txt .
 
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
-WORKDIR /workspace
 
 RUN chown -R $USERNAME:$USERNAME /workspace
 

@@ -7,3 +7,6 @@ services:
       - static_volume:/workspace/static
     ports:
       - "8000:8000"
+  postgres:
+    ports:
+      - "5432:5432"
