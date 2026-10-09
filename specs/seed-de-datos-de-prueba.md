@@ -47,7 +47,7 @@ Cubre los 5 roles del documento de especificación (Owner, Admin, Member a nivel
 }
 ```
 
-Con cualquiera de esas credenciales se puede loguear normalmente vía `POST /api/v1/auth/login` (ver [sistema-logueo.md](sistema-logueo.md)).
+Con cualquiera de esas credenciales se puede loguear normalmente vía `POST /api/v1/auth/login` (ver [login/sistema-logueo.md](login/sistema-logueo.md)).
 
 ## 4. Implementación
 

@@ -1,8 +1,8 @@
 # Grupos y roles de grupo
 
-Spec técnico de las entidades `Group` y `GroupMembership`, segundo nivel de la jerarquía Organización → Grupo → Proyecto → Tarea. Complementa [organizaciones-y-roles.md](organizaciones-y-roles.md).
+Spec técnico de las entidades `Group` y `GroupMembership`, segundo nivel de la jerarquía Organización → Grupo → Proyecto → Tarea. Complementa [organizaciones-y-roles.md](../organizaciones-y-roles.md).
 
-> Estado: solo modelo de datos + migración. No hay servicios ni endpoints todavía.
+> Estado: modelo de datos + migración (aplicada contra la base Postgres real). Los servicios y endpoints (crear grupo, asignar group lead, agregar/quitar miembros) ya están implementados — ver [grupos-abm.md](grupos-abm.md).
 
 ## 1. Resumen
 
@@ -15,7 +15,7 @@ Spec técnico de las entidades `Group` y `GroupMembership`, segundo nivel de la 
 
 ### 2.1. `Group`
 
-[app/organizations/models/group.py](../app/organizations/models/group.py)
+[app/organizations/models/group.py](../../app/organizations/models/group.py)
 
 | Campo | Tipo | Notas |
 |---|---|---|
@@ -29,7 +29,7 @@ Spec técnico de las entidades `Group` y `GroupMembership`, segundo nivel de la 
 
 ### 2.2. `GroupMembership`
 
-[app/organizations/models/group_membership.py](../app/organizations/models/group_membership.py)
+[app/organizations/models/group_membership.py](../../app/organizations/models/group_membership.py)
 
 | Campo | Tipo | Notas |
 |---|---|---|
@@ -49,29 +49,30 @@ Spec técnico de las entidades `Group` y `GroupMembership`, segundo nivel de la 
 
 Ambas a nivel de base de datos (constraints de Postgres).
 
-### 3.1. Reglas de negocio **no** cubiertas por constraints de DB (quedan para la capa de servicio)
+### 3.1. Reglas de negocio que viven en la capa de servicio (no en constraints de DB)
 
-- Un `GroupMembership` debería requerir que el usuario ya sea `Member` de la `Organization` dueña del `Group` (RF-17: "el Group Lead agrega Members de la organización a su grupo"). No hay FK ni constraint que lo garantice a nivel de esquema — es una validación cruzada entre `Membership` y `GroupMembership` que se implementará en el servicio de alta.
-- Solo el Owner puede asignar el rol de Group Lead (RF-15) y solo el Group Lead puede agregar/remover miembros de su propio grupo (RF-17, RF-18) — autorización, no modelo de datos.
+- Un `GroupMembership` requiere que el usuario ya sea `Member` de la `Organization` dueña del `Group` (RF-17) — validado en `agregar_miembro_grupo`, ver [grupos-abm.md §2.7](grupos-abm.md).
+- Solo el Owner puede asignar el rol de Group Lead (RF-15) y solo el Group Lead puede agregar/remover miembros de su propio grupo (RF-17, RF-18) — ver [grupos-abm.md](grupos-abm.md) para el detalle, incluyendo un caso de bootstrap no trivial (§3 de ese spec).
 
 ## 4. Relación con el documento de especificación
 
-| RF | Descripción | Cubierto por el modelo |
+El modelo de datos de esta sección sostiene estos requerimientos funcionales; la lógica y los endpoints están documentados en [grupos-abm.md](grupos-abm.md):
+
+| RF | Descripción | Cubierto por |
 |---|---|---|
-| RF-14 (bis) | Owner crea grupos dentro de la organización | `Group` — falta el servicio/endpoint |
-| RF-15 | Owner asigna rol de Group Lead a un Member, dentro de un grupo | `GroupMembership(role='group_lead')` + constraint de unicidad — falta el servicio |
-| RF-16 | Owner elimina un grupo (cascada proyectos y tareas) | `on_delete=CASCADE` en `Group.organization` cubre el borrado del grupo en sí; la cascada hacia Proyecto/Tarea se resolverá cuando existan esos modelos |
-| RF-17 | Group Lead agrega Members de la organización a su grupo | `GroupMembership(role='contributor')` — falta la validación cruzada con `Membership` y el endpoint |
-| RF-18 | Group Lead remueve miembros de su grupo (se reasignan sus tareas) | Falta completo: borrar `GroupMembership` es trivial, pero la reasignación de tareas depende del modelo de Tarea, que no existe todavía |
+| RF-14 (bis) | Owner crea grupos dentro de la organización | `Group` — endpoint en grupos-abm.md §2.1 |
+| RF-15 | Owner asigna rol de Group Lead a un Member, dentro de un grupo | `GroupMembership(role='group_lead')` + constraint de unicidad — endpoint en §2.8 |
+| RF-16 | Owner elimina un grupo (cascada proyectos y tareas) | `on_delete=CASCADE` en `Group.organization` y en `Project.group` — endpoint en §2.5 |
+| RF-17 | Group Lead agrega Members de la organización a su grupo | `GroupMembership(role='contributor')` — endpoint en §2.7 |
+| RF-18 | Group Lead remueve miembros de su grupo (se reasignan sus tareas) | Baja del miembro: endpoint en §2.9. Reasignación de tareas: pendiente, depende de `Task` |
 | RF-19 | Un miembro puede pertenecer a más de un grupo simultáneamente | Sin restricción que lo impida — un usuario puede tener múltiples `GroupMembership` en distintos `Group` |
 
 ## 5. Migración
 
-[app/organizations/migrations/0002_group_groupmembership_and_more.py](../app/organizations/migrations/0002_group_groupmembership_and_more.py) — generada, no aplicada contra la base Postgres real.
+[app/organizations/migrations/0002_group_groupmembership_and_more.py](../../app/organizations/migrations/0002_group_groupmembership_and_more.py) — aplicada contra la base Postgres real.
 
 ## 6. Notas sobre el estado actual
 
-- No hay servicio/endpoint para crear grupos (RF-14 bis), asignar Group Lead (RF-15), eliminar grupos (RF-16), ni gestionar miembros del grupo (RF-17, RF-18).
-- No hay validación que impida agregar a un `Group` a un usuario que no sea `Member` de la `Organization` correspondiente (ver 3.1).
-- La cascada de borrado de `Group` → Proyectos → Tareas (RF-16) solo está resuelta hasta donde existen modelos: falta modelar `Project` y `Task`.
-- `Proyecto` y `Tarea` (con sus dependencias) siguen sin modelar — son el siguiente nivel de la jerarquía.
+- Los endpoints de creación, asignación de Group Lead y gestión de miembros ya están implementados — ver [grupos-abm.md](grupos-abm.md).
+- La reasignación automática de tareas al remover un miembro (RF-18) sigue pendiente: depende de que exista `Task`.
+- `Proyecto` ya está modelado — ver [proyectos.md](../proyectos.md). `Tarea` (con sus dependencias) sigue sin modelar.

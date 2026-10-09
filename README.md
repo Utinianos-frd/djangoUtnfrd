@@ -67,24 +67,29 @@ docker compose exec web bash
 
 A partir de acá los pasos son los mismos que en la Opción A (ya estás dentro del contenedor).
 
+> **Atajo**: `commands/dev.sh` agrupa los comandos de Django más usados (migrar, levantar el server, seed, etc.) para no tener que acordarse cada uno. Corré `bash commands/dev.sh help` dentro del contenedor para ver la lista completa. Abajo están los comandos equivalentes por si prefieren usar `manage.py` directo.
+
 ## 4. Migraciones
 
 Dentro del contenedor `web`:
 
 ```bash
 python manage.py migrate
+# o: bash commands/dev.sh migrate
 ```
 
 ## 5. Crear un superusuario (opcional, para /admin/)
 
 ```bash
 python manage.py createsuperuser
+# o: bash commands/dev.sh superuser
 ```
 
 ## 6. Levantar el servidor de desarrollo
 
 ```bash
 python manage.py runserver 0.0.0.0:8000
+# o: bash commands/dev.sh run
 ```
 
 La app queda disponible en [http://localhost:8000](http://localhost:8000) (el puerto 8000 ya está mapeado al host por `docker-compose.override.yml`). El puerto 5432 de Postgres también queda expuesto al host por si querés conectarte con un cliente de DB externo.
@@ -95,6 +100,7 @@ Para no tener que crear usuarios a mano, con el servidor corriendo (y las migrac
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/dev/seed
+# o (en otra terminal dentro del contenedor, con 'run' corriendo): bash commands/dev.sh seed
 ```
 
 o desde el Swagger (`/api/v1/docs/`, tag **Dev**). Esto crea una organización de demo (`Tasker Demo`) con un usuario por cada rol del sistema, todos con password conocida:
@@ -117,17 +123,18 @@ Con el servidor corriendo:
 - Redoc: `http://localhost:8000/api/v1/redoc/`
 - Schema OpenAPI crudo: `http://localhost:8000/api/v1/schema/`
 
-Todos los endpoints de la API responden en formato [JSON:API](https://jsonapi.org/) (ver [specs/sistema-logueo.md](specs/sistema-logueo.md) para el detalle de auth).
+Todos los endpoints de la API responden en formato [JSON:API](https://jsonapi.org/) (ver [specs/login/sistema-logueo.md](specs/login/sistema-logueo.md) para el detalle de auth).
 
 ## Estructura del proyecto
 
 ```
 app/
-  users/          # autenticación (login, registro, JWT) — ver specs/sistema-logueo.md
-  organizations/  # Organización, Membership, Group, GroupMembership — ver specs/organizaciones-y-roles.md y specs/grupos-y-roles.md
-  tasks/          # Proyecto/Tarea (en desarrollo)
+  users/          # autenticación (login, registro, JWT) — ver specs/login/sistema-logueo.md
+  organizations/  # Organización, Membership, Group, GroupMembership — ver specs/organizaciones-y-roles.md y specs/grupos_y_roles/grupos-y-roles.md
+  tasks/          # Proyecto y Tarea (ABM básico) — ver specs/proyectos.md y specs/tareas.md. Dependencias y comentarios: todavía no implementados
 config/           # settings, urls, wsgi/asgi del proyecto Django
 specs/            # specs funcionales y técnicas de cada módulo
+commands/         # atajos de shell (ver "Atajo" en la sección de setup) — bash commands/dev.sh help
 ```
 
 ## Perfil de producción (nginx)

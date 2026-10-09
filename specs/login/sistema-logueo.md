@@ -1,6 +1,6 @@
 # Sistema de logueo
 
-Spec técnico del sistema de autenticación actual del proyecto. Documenta el comportamiento tal como está implementado en [app/users/](../app/users/), no propone cambios.
+Spec técnico del sistema de autenticación actual del proyecto. Documenta el comportamiento tal como está implementado en [app/users/](../../app/users/), no propone cambios.
 
 ## 1. Resumen
 
@@ -8,11 +8,11 @@ Spec técnico del sistema de autenticación actual del proyecto. Documenta el co
 - **Autenticación**: JWT vía `djangorestframework-simplejwt` 5.5. No hay sesiones ni cookies involucradas en la API; el cliente guarda `access`/`refresh` y los envía como header.
 - **Formato de request/response**: todos los endpoints de auth siguen la convención [JSON:API](https://jsonapi.org/) (`{ "data": { "type", "attributes" } }`), incluyendo los errores, **excepto** `token/refresh`, que usa el formato nativo de `simplejwt` (ver [4.3](#43-post-apiv1authtokenrefresh)).
 - **Documentación autogenerada**: Swagger/Redoc vía `drf-spectacular`, disponible en `/api/v1/docs/` y `/api/v1/redoc/`. Este spec complementa esa referencia con reglas de negocio, modelo de datos y seguridad que el schema OpenAPI no cubre.
-- **Base URL**: `/api/v1/auth/` (definida en [config/urls.py](../config/urls.py)).
+- **Base URL**: `/api/v1/auth/` (definida en [config/urls.py](../../config/urls.py)).
 
 ## 2. Modelo de datos
 
-`Users` extiende `AbstractUser` de Django ([app/users/models/users.py](../app/users/models/users.py)):
+`Users` extiende `AbstractUser` de Django ([app/users/models/users.py](../../app/users/models/users.py)):
 
 | Campo      | Tipo         | Constraints                    |
 |------------|--------------|---------------------------------|
@@ -27,7 +27,7 @@ Spec técnico del sistema de autenticación actual del proyecto. Documenta el co
 
 ## 3. Endpoints
 
-Rutas definidas en [app/users/urls.py](../app/users/urls.py):
+Rutas definidas en [app/users/urls.py](../../app/users/urls.py):
 
 | Método | Path                          | Auth requerida    | Vista |
 |--------|-------------------------------|-------------------|-------|
@@ -73,7 +73,7 @@ Autentica un usuario existente y devuelve un par de tokens.
 - `400` — body no sigue estructura JSON:API, o falta `username`/`password`.
 - `401` — credenciales inválidas (`authenticate()` de Django devuelve `None`).
 
-Lógica: [auth_service.login_usuario](../app/users/services/auth_service.py#L19).
+Lógica: [auth_service.login_usuario](../../app/users/services/auth_service.py#L19).
 
 ### 3.2. `POST /api/v1/auth/register`
 
@@ -92,7 +92,7 @@ Crea un usuario nuevo con `role='user'` y devuelve tokens (login automático pos
   }
 }
 ```
-- Validado por `RegisterSerializer` ([app/users/serializers/register_serializer.py](../app/users/serializers/register_serializer.py)):
+- Validado por `RegisterSerializer` ([app/users/serializers/register_serializer.py](../../app/users/serializers/register_serializer.py)):
   - `username`: string, `max_length=150`.
   - `email`: formato email válido.
   - `password`: string, `min_length=8`, `write_only`.
@@ -116,7 +116,7 @@ Crea un usuario nuevo con `role='user'` y devuelve tokens (login automático pos
 - `400` — body no sigue estructura JSON:API, o falla la validación del serializer (errores con `source.pointer` apuntando al atributo, ej. `/data/attributes/email`).
 - `409` — `username` ya existe, o `email` ya está registrado (se chequean por separado, primero username).
 
-Lógica: [auth_service.register_usuario](../app/users/services/auth_service.py#L48).
+Lógica: [auth_service.register_usuario](../../app/users/services/auth_service.py#L48).
 
 ### 3.3. `POST /api/v1/auth/token/refresh`
 
@@ -161,7 +161,7 @@ Devuelve el perfil del usuario autenticado. Requiere header `Authorization: Bear
 **Errores**
 - `401` — sin token o token inválido/expirado (manejado por `IsAuthenticated` + `JWTAuthentication`, no por `auth_service`).
 
-Lógica: [auth_service.get_perfil_usuario](../app/users/services/auth_service.py#L88).
+Lógica: [auth_service.get_perfil_usuario](../../app/users/services/auth_service.py#L88).
 
 ## 4. Flujos
 
@@ -221,7 +221,7 @@ Cliente                          API
 
 ## 6. Manejo de errores
 
-Formato de error JSON:API usado por `login`, `register` y `me` (helper `_error()` en [auth_service.py](../app/users/services/auth_service.py#L8)):
+Formato de error JSON:API usado por `login`, `register` y `me` (helper `_error()` en [auth_service.py](../../app/users/services/auth_service.py#L8)):
 ```json
 { "errors": [{ "status": "401", "detail": "Credenciales inválidas" }] }
 ```
@@ -245,7 +245,7 @@ Para errores de validación de `register`, se agrega `source.pointer`:
 
 ## 7. Configuración relacionada
 
-En [config/settings.py](../config/settings.py):
+En [config/settings.py](../../config/settings.py):
 
 ```python
 AUTH_USER_MODEL = 'users.Users'

@@ -2,7 +2,7 @@
 
 Spec técnico de las entidades `Organization` y `Membership`, base de la jerarquía Organización → Grupo → Proyecto → Tarea definida en el documento de especificación de Tasker (sección 2).
 
-> Estado: solo modelo de datos + migración. Todavía no hay servicios, endpoints ni lógica de negocio (creación de organización, invitación, traspaso de owner). Esa lógica se especificará por separado cuando se implemente.
+> Estado: modelo de datos + migración (aplicada contra la base Postgres real). Los servicios y endpoints (creación de organización, invitación, gestión de miembros, traspaso de owner) ya están implementados — ver [organizaciones-abm.md](organizaciones-abm.md).
 
 ## 1. Resumen
 
@@ -54,30 +54,25 @@ Estas reglas están a nivel de base de datos (constraints de Postgres), no solo 
 
 ## 4. Relación con el documento de especificación
 
-Cubre parcialmente estos requerimientos funcionales (modelo de datos únicamente, falta la lógica/endpoints):
+El modelo de datos de esta sección sostiene estos requerimientos funcionales; la lógica y los endpoints están documentados en [organizaciones-abm.md](organizaciones-abm.md):
 
-| RF | Descripción | Cubierto por el modelo |
+| RF | Descripción | Cubierto por |
 |---|---|---|
-| RF-08 | Crear organización y asignar rol Owner automáticamente | `Organization` + `Membership(role='owner')` — falta el servicio que los crea juntos |
-| RF-09 | Generar/copiar link de invitación único | `Organization.invite_token` |
-| RF-10 | Desactivar o regenerar el link de invitación | `Organization.invite_active` (falta endpoint de regeneración) |
-| RF-11, RF-12 | Unirse a una organización por link, con rol Member automático | Requiere `Membership(role='member')` — falta el endpoint que resuelve el token |
-| RF-14 | Owner traspasa su rol a otro miembro | Habilitado por el constraint `unique_owner_per_organization` — falta el servicio que hace el traspaso |
+| RF-08 | Crear organización y asignar rol Owner automáticamente | `Organization` + `Membership(role='owner')` — servicio y endpoint en organizaciones-abm.md §2.1 |
+| RF-09 | Generar/copiar link de invitación único | `Organization.invite_token` — endpoint en §2.6 |
+| RF-10 | Desactivar o regenerar el link de invitación | `Organization.invite_active` — endpoints en §2.6 |
+| RF-11, RF-12 | Unirse a una organización por link, con rol Member automático | `Membership(role='member')` — endpoint en §2.7 |
+| RF-13 | Mostrar al usuario sin organización la opción de crear/unirse | Resuelto por `GET /organizations/` (§2.2): lista vacía → el frontend decide mostrar esa pantalla |
+| RF-14 | Owner traspasa su rol a otro miembro | Constraint `unique_owner_per_organization` + lógica de traspaso en §2.9 |
 
-No cubre todavía: RF-13 (pantalla de "sin organización"), ni nada del modelo de negocio de límites por plan (sección 8.5 del doc: validar plan/límite antes de acciones).
+No cubre todavía: nada del modelo de negocio de límites por plan (sección 8.5 del doc: validar plan/límite antes de acciones) — ver notas en organizaciones-abm.md §4.
 
 ## 5. Migración
 
-[app/organizations/migrations/0001_initial.py](../app/organizations/migrations/0001_initial.py) — `python manage.py makemigrations organizations`, generada pero **no aplicada** (no se corrió `migrate` contra la base Postgres del `docker-compose`).
+[app/organizations/migrations/0001_initial.py](../app/organizations/migrations/0001_initial.py) — aplicada contra la base Postgres real (`python manage.py migrate organizations`).
 
 ## 6. Notas sobre el estado actual
 
-Explícitamente no implementado en esta tanda (fuera de alcance de este spec, no del proyecto):
-
-- No hay servicio/endpoint para crear una organización (RF-08).
-- No hay endpoint para generar, ver o regenerar el link de invitación (RF-09, RF-10).
-- No hay endpoint para unirse a una organización vía link (RF-11, RF-12).
-- No hay endpoint para invitar, eliminar o cambiar el rol de un miembro (sección 3.1 del doc).
-- No hay endpoint para traspasar el rol de Owner (RF-14).
-- No hay validación de límites de plan (sección 8.5 del doc).
-- `Group` y `Membership` a nivel de grupo (Group Lead / Contributor) no están modelados todavía.
+- Los endpoints de creación, invitación, gestión de miembros y traspaso de Owner ya están implementados — ver [organizaciones-abm.md](organizaciones-abm.md).
+- No hay validación de límites de plan (sección 8.5 del doc) antes de crear organización, invitar o unirse.
+- `Group` y `GroupMembership` (Group Lead / Contributor) están modelados por separado — ver [grupos_y_roles/grupos-y-roles.md](grupos_y_roles/grupos-y-roles.md) — pero todavía no tienen ABM de endpoints propio.
