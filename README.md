@@ -130,7 +130,7 @@ Todos los endpoints de la API responden en formato [JSON:API](https://jsonapi.or
 ```
 app/
   users/          # autenticación (login, registro, JWT) — ver specs/login/sistema-logueo.md
-  organizations/  # Organización, Membership, Group, GroupMembership — ver specs/organizaciones-y-roles.md y specs/grupos_y_roles/grupos-y-roles.md
+  organizations/  # Organización, Membership, Group, GroupMembership, Workload — ver specs/organizaciones-y-roles.md, specs/grupos_y_roles/grupos-y-roles.md y specs/workload.md
   tasks/          # Proyecto y Tarea (ABM básico) — ver specs/proyectos.md y specs/tareas.md. Dependencias y comentarios: todavía no implementados
 config/           # settings, urls, wsgi/asgi del proyecto Django
 specs/            # specs funcionales y técnicas de cada módulo

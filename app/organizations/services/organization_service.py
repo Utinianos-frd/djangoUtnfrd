@@ -15,6 +15,7 @@ def _organization_resource(organization, role):
             "name": organization.name,
             "plan": organization.plan,
             "plan_status": organization.plan_status,
+            "overload_threshold": organization.overload_threshold,
             "role": role,
         },
     }
@@ -85,8 +86,14 @@ def actualizar_organizacion(request, organization_id):
     if not serializer.is_valid():
         return {"errors": serializer_errors(serializer)}, 400
 
+    changed = False
     if 'name' in serializer.validated_data:
         organization.name = serializer.validated_data['name']
+        changed = True
+    if 'overload_threshold' in serializer.validated_data:
+        organization.overload_threshold = serializer.validated_data['overload_threshold']
+        changed = True
+    if changed:
         organization.save()
 
     return _organization_response(organization, request.user), 200

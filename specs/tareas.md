@@ -56,6 +56,8 @@ Spec técnico de la entidad `Task`, último nivel de la jerarquía Organización
 { "data": { "type": "tasks", "id": "1", "attributes": { "title": "Implementar login", "status": "pending", "project_id": 3, "assignee_ids": [5, 8] } } }
 ```
 
+Si alguno de los asignados queda sobrecargado con esta asignación, la response trae además un bloque `meta.warnings` (no bloquea la creación) — ver [workload.md §4](workload.md).
+
 **Errores**: `404` (organización, grupo o proyecto inexistente), `403` (no es group lead), `400` (falta `title`, o algún `assignee_id` no es miembro del grupo).
 
 ### 3.2. `GET /tasks` — listar tareas del proyecto (RF-31)
@@ -71,7 +73,7 @@ Mismo criterio de visibilidad que el listado, pero a nivel de una tarea puntual:
 
 Dos caminos según el rol de quien hace el request (RF-27 vs. RF-29):
 
-- **Group lead**: puede cambiar `title`, `status` y/o `assignee_ids` (valida los nuevos `assignee_ids` igual que en el create). Es un `PATCH` parcial — solo toca los campos presentes en el body.
+- **Group lead**: puede cambiar `title`, `status` y/o `assignee_ids` (valida los nuevos `assignee_ids` igual que en el create). Es un `PATCH` parcial — solo toca los campos presentes en el body. Si el body trae `assignee_ids`, la response puede incluir `meta.warnings` igual que en el create (ver [workload.md §4](workload.md)).
 - **Contributor asignado a la tarea**: **solo** puede enviar `status`. Si el body trae cualquier otro campo (`title`, `assignee_ids`), `400` — no se ignora silenciosamente, se rechaza explícitamente para que quede claro que no tiene permiso sobre esos campos. Si no está asignado a la tarea, `403` (ni siquiera puede cambiar el status de una tarea ajena).
 
 **Errores**: `404` (tarea/proyecto/grupo/organización inexistente), `403` (contributor no asignado, o usuario sin rol en el grupo), `400` (validación de serializer, `assignee_ids` inválidos, o contributor mandando campos no permitidos).

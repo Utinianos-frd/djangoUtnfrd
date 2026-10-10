@@ -10,6 +10,7 @@ from .views.organization_view import (
 from .views.membership_view import members, member_detail
 from .views.group_view import groups, group_detail
 from .views.group_membership_view import group_members, group_member_detail
+from .views.workload_view import workload, workload_member_detail
 
 urlpatterns = [
     path('', organizations, name='organizations'),
@@ -27,5 +28,11 @@ urlpatterns = [
         '<int:organization_id>/groups/<int:group_id>/members/<int:user_id>',
         group_member_detail,
         name='group-member-detail',
+    ),
+    path('<int:organization_id>/groups/<int:group_id>/workload', workload, name='group-workload'),
+    path(
+        '<int:organization_id>/groups/<int:group_id>/workload/<int:user_id>',
+        workload_member_detail,
+        name='group-workload-member-detail',
     ),
 ]

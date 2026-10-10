@@ -1,4 +1,5 @@
 from app.organizations.models import Organization, Group, Membership, GroupMembership
+from app.organizations.services.workload_service import advertencias_de_asignacion
 from ..models import Project, Task
 from ..serializers.create_task_serializer import CreateTaskSerializer
 from ..serializers.update_task_serializer import UpdateTaskSerializer
@@ -48,6 +49,13 @@ def _task_resource(task):
     }
 
 
+def _task_response(task, warnings=None):
+    payload = {"data": _task_resource(task)}
+    if warnings:
+        payload["meta"] = {"warnings": warnings}
+    return payload
+
+
 def _validate_assignee_ids(group, assignee_ids):
     valid_ids = set(
         GroupMembership.objects.filter(group=group, user_id__in=assignee_ids).values_list('user_id', flat=True)
@@ -83,7 +91,8 @@ def crear_tarea(request, organization_id, group_id, project_id):
     if assignee_ids:
         task.assignees.set(assignee_ids)
 
-    return {"data": _task_resource(task)}, 201
+    warnings = advertencias_de_asignacion(organization, group, assignee_ids)
+    return _task_response(task, warnings), 201
 
 
 def listar_tareas(request, organization_id, group_id, project_id):
@@ -150,10 +159,13 @@ def actualizar_tarea(request, organization_id, group_id, project_id, task_id):
         if 'status' in serializer.validated_data:
             task.status = serializer.validated_data['status']
         task.save()
+        warnings = []
         if 'assignee_ids' in serializer.validated_data:
-            task.assignees.set(serializer.validated_data['assignee_ids'])
+            assignee_ids = serializer.validated_data['assignee_ids']
+            task.assignees.set(assignee_ids)
+            warnings = advertencias_de_asignacion(organization, group, assignee_ids)
 
-        return {"data": _task_resource(task)}, 200
+        return _task_response(task, warnings), 200
 
     # Contributor: solo puede cambiar el status de sus propias tareas (RF-29), nada más.
     if not task.assignees.filter(id=request.user.id).exists():

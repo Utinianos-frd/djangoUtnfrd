@@ -19,6 +19,7 @@ class Organization(models.Model):
     invite_active = models.BooleanField(default=True)
     plan = models.CharField(max_length=10, choices=Plan.choices, default=Plan.FREE)
     plan_status = models.CharField(max_length=10, choices=PlanStatus.choices, default=PlanStatus.ACTIVE)
+    overload_threshold = models.PositiveIntegerField(default=5)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
