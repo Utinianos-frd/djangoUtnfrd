@@ -13,6 +13,7 @@ def _organization_resource(organization, role):
         "id": str(organization.id),
         "attributes": {
             "name": organization.name,
+            "logo_url": organization.logo_url,
             "plan": organization.plan,
             "plan_status": organization.plan_status,
             "overload_threshold": organization.overload_threshold,
@@ -47,7 +48,10 @@ def crear_organizacion(request):
     if not serializer.is_valid():
         return {"errors": serializer_errors(serializer)}, 400
 
-    organization = Organization.objects.create(name=serializer.validated_data['name'])
+    organization = Organization.objects.create(
+        name=serializer.validated_data['name'],
+        logo_url=serializer.validated_data.get('logo_url', ''),
+    )
     Membership.objects.create(organization=organization, user=request.user, role=Membership.Role.OWNER)
 
     return _organization_response(organization, request.user), 201
@@ -92,6 +96,9 @@ def actualizar_organizacion(request, organization_id):
         changed = True
     if 'overload_threshold' in serializer.validated_data:
         organization.overload_threshold = serializer.validated_data['overload_threshold']
+        changed = True
+    if 'logo_url' in serializer.validated_data:
+        organization.logo_url = serializer.validated_data['logo_url']
         changed = True
     if changed:
         organization.save()

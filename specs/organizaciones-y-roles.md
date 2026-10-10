@@ -20,10 +20,12 @@ Spec técnico de las entidades `Organization` y `Membership`, base de la jerarqu
 | Campo | Tipo | Notas |
 |---|---|---|
 | `name` | CharField(255) | Nombre de la organización |
+| `logo_url` | URLField, `blank=True`, `default=''` | Link a la imagen del logo (no definido en el documento original; agregado a pedido). Solo valida formato de URL, no que apunte realmente a una imagen — ver [organizaciones-abm.md §5](organizaciones-abm.md) |
 | `invite_token` | UUIDField, unique, `default=uuid4` | Token del link de invitación único (sección 2.3 del doc, RF-09) |
 | `invite_active` | BooleanField, `default=True` | Permite desactivar el link sin borrarlo (RF-10) |
 | `plan` | CharField, choices `free` / `pro` | `default='free'` — corresponde a la sección 8.5 del doc |
 | `plan_status` | CharField, choices `active` / `trial` / `expired` | `default='active'` |
+| `overload_threshold` | PositiveIntegerField, `default=5` | Umbral de sobrecarga para Workload — ver [workload.md](workload.md) |
 | `created_at` | DateTimeField, `auto_now_add=True` | |
 
 - Tabla: `organizations`.

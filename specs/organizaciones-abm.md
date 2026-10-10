@@ -34,8 +34,10 @@ Crea la `Organization` y, en la misma operación, la `Membership` del usuario au
 
 **Request**
 ```json
-{ "data": { "type": "organizations", "attributes": { "name": "Mi Equipo" } } }
+{ "data": { "type": "organizations", "attributes": { "name": "Mi Equipo", "logo_url": "https://cdn.example.com/logo.png" } } }
 ```
+
+`logo_url` es opcional (default `""`) tanto acá como en el `PATCH` — ver §2.4.
 
 **Response 201**
 ```json
@@ -43,7 +45,14 @@ Crea la `Organization` y, en la misma operación, la `Membership` del usuario au
   "data": {
     "type": "organizations",
     "id": "1",
-    "attributes": { "name": "Mi Equipo", "plan": "free", "plan_status": "active", "role": "owner" }
+    "attributes": {
+      "name": "Mi Equipo",
+      "logo_url": "https://cdn.example.com/logo.png",
+      "plan": "free",
+      "plan_status": "active",
+      "overload_threshold": 5,
+      "role": "owner"
+    }
   }
 }
 ```
@@ -58,7 +67,7 @@ Devuelve todas las organizaciones donde el usuario autenticado tiene una `Member
 
 **Response 200**
 ```json
-{ "data": [ { "type": "organizations", "id": "1", "attributes": { "name": "Mi Equipo", "plan": "free", "plan_status": "active", "role": "owner" } } ] }
+{ "data": [ { "type": "organizations", "id": "1", "attributes": { "name": "Mi Equipo", "logo_url": "", "plan": "free", "plan_status": "active", "overload_threshold": 5, "role": "owner" } } ] }
 ```
 
 ### 2.3. `GET /organizations/{id}` — detalle
@@ -67,9 +76,13 @@ Igual estructura que el item de la lista. **Errores**: `404` si no existe la org
 
 ### 2.4. `PATCH /organizations/{id}` — editar
 
-Por ahora solo permite cambiar `name` (único campo editable del dominio; `plan`/`plan_status` quedan fuera de este ABM, ver sección 5).
+Campos editables: `name`, `logo_url` y `overload_threshold` (este último, ver [workload.md §3.3](workload.md)). `plan`/`plan_status` quedan fuera de este ABM, ver sección 5. Es un `PATCH` parcial — solo se tocan los campos presentes en el body.
 
-**Request**: igual forma que el create, con los campos a cambiar. **Errores**: `404`, `403` (no-owner).
+```json
+{ "data": { "type": "organizations", "attributes": { "logo_url": "https://cdn.example.com/logo-nuevo.png" } } }
+```
+
+**Errores**: `404`, `403` (no-owner), `400` (si `logo_url` no es una URL válida — se valida formato, no que la URL responda ni que sea efectivamente una imagen, ver §5).
 
 ### 2.5. `DELETE /organizations/{id}` — eliminar
 
@@ -127,7 +140,8 @@ Owner o Admin (matriz: "Eliminar miembros"). **No se puede eliminar a quien tien
 
 ## 3. Decisiones de diseño
 
-- **Un solo campo mutable en `Organization` vía PATCH (`name`)**: `plan`/`plan_status`/`invite_token`/`invite_active` tienen sus propias reglas (billing, regeneración) y no deberían poder pisarse con un PATCH genérico — por eso invite tiene sus propios endpoints de acción en vez de ser parte del PATCH.
+- **`name`, `logo_url` y `overload_threshold` son mutables vía PATCH; `plan`/`plan_status`/`invite_token`/`invite_active` no**: estos últimos tienen sus propias reglas (billing, regeneración) y no deberían poder pisarse con un PATCH genérico — por eso invite tiene sus propios endpoints de acción en vez de ser parte del PATCH.
+- **`logo_url` solo valida formato de URL, no contenido**: no se verifica que la URL responda, ni que el content-type sea una imagen — hacerlo implicaría que el backend salga a buscar una URL arbitraria que mandó el cliente (riesgo de SSRF) solo para una validación cosmética. Si el link está roto o no es una imagen, es responsabilidad del frontend al renderizarlo (`<img>` simplemente no carga).
 - **Autorización en el service, no en una `permission_class`**: ver sección 1. Si en el futuro se repite mucho este patrón entre apps (organizations, y más adelante tasks), vale la pena extraerlo a una `permission_class` reutilizable tipo `HasOrganizationRole(*roles)` — hoy no se justifica todavía (dos servicios, patrón simple).
 - **`join` devuelve 404 unificado para token inexistente o desactivado**: decisión deliberada para no revelarle a quien prueba tokens al azar si un link "existió pero fue desactivado" vs "nunca existió".
 

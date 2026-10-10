@@ -15,6 +15,7 @@ class Organization(models.Model):
         EXPIRED = 'expired', 'Expired'
 
     name = models.CharField(max_length=255)
+    logo_url = models.URLField(blank=True, default='')
     invite_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     invite_active = models.BooleanField(default=True)
     plan = models.CharField(max_length=10, choices=Plan.choices, default=Plan.FREE)
