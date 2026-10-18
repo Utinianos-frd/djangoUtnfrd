@@ -1,6 +1,6 @@
 from app.organizations.models import Organization, Group, Membership, GroupMembership
 from app.organizations.services.workload_service import advertencias_de_asignacion
-from ..models import Project, Task
+from ..models import Project, Task, TaskDependency
 from ..serializers.create_task_serializer import CreateTaskSerializer
 from ..serializers.update_task_serializer import UpdateTaskSerializer
 from ..serializers.update_task_status_serializer import UpdateTaskStatusSerializer
@@ -36,6 +36,14 @@ def _get_org_group_project(organization_id, group_id, project_id):
     return organization, group, project
 
 
+def _is_blocked(task):
+    """RF-33 UI: ¿esta tarea debería mostrar el candado? Solo FS bloquea el arranque; FF no impide
+    empezarla, solo completarla, así que no cuenta para este indicador."""
+    return TaskDependency.objects.filter(
+        blocked_task=task, dependency_type=TaskDependency.Type.FINISH_TO_START,
+    ).exclude(blocking_task__status=Task.Status.DONE).exists()
+
+
 def _task_resource(task):
     return {
         "type": "tasks",
@@ -45,6 +53,7 @@ def _task_resource(task):
             "status": task.status,
             "project_id": task.project_id,
             "assignee_ids": list(task.assignees.values_list('id', flat=True)),
+            "blocked": _is_blocked(task),
         },
     }
 
@@ -54,6 +63,31 @@ def _task_response(task, warnings=None):
     if warnings:
         payload["meta"] = {"warnings": warnings}
     return payload
+
+
+def _dependency_block_reason(task, new_status):
+    """RF-33: una tarea bloqueada no puede cambiar de estado mientras su bloqueante no esté completada.
+    FS: no puede salir de 'pending' hasta que la bloqueante esté 'done'.
+    FF: no puede llegar a 'done' hasta que la bloqueante esté 'done'."""
+    if new_status == task.status:
+        return None
+
+    pending_blockers = TaskDependency.objects.filter(blocked_task=task).exclude(
+        blocking_task__status=Task.Status.DONE,
+    ).select_related('blocking_task')
+
+    for dep in pending_blockers:
+        if dep.dependency_type == TaskDependency.Type.FINISH_TO_START and new_status != Task.Status.PENDING:
+            return (
+                f"No se puede avanzar: depende de '{dep.blocking_task.title}' (finish-to-start), "
+                "que todavía no está completada"
+            )
+        if dep.dependency_type == TaskDependency.Type.FINISH_TO_FINISH and new_status == Task.Status.DONE:
+            return (
+                f"No se puede completar: depende de '{dep.blocking_task.title}' (finish-to-finish), "
+                "que todavía no está completada"
+            )
+    return None
 
 
 def _validate_assignee_ids(group, assignee_ids):
@@ -154,6 +188,11 @@ def actualizar_tarea(request, organization_id, group_id, project_id, task_id):
             if invalid:
                 return invalid
 
+        if 'status' in serializer.validated_data:
+            block_reason = _dependency_block_reason(task, serializer.validated_data['status'])
+            if block_reason:
+                return error(409, block_reason)
+
         if 'title' in serializer.validated_data:
             task.title = serializer.validated_data['title']
         if 'status' in serializer.validated_data:
@@ -177,6 +216,10 @@ def actualizar_tarea(request, organization_id, group_id, project_id, task_id):
     serializer = UpdateTaskStatusSerializer(data=attributes)
     if not serializer.is_valid():
         return {"errors": serializer_errors(serializer)}, 400
+
+    block_reason = _dependency_block_reason(task, serializer.validated_data['status'])
+    if block_reason:
+        return error(409, block_reason)
 
     task.status = serializer.validated_data['status']
     task.save()

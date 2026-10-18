@@ -131,7 +131,8 @@ Todos los endpoints de la API responden en formato [JSON:API](https://jsonapi.or
 app/
   users/          # autenticación (login, registro, JWT) — ver specs/login/sistema-logueo.md
   organizations/  # Organización, Membership, Group, GroupMembership, Workload — ver specs/organizaciones-y-roles.md, specs/grupos_y_roles/grupos-y-roles.md y specs/workload.md
-  tasks/          # Proyecto y Tarea (ABM básico) — ver specs/proyectos.md y specs/tareas.md. Dependencias y comentarios: todavía no implementados
+  tasks/          # Proyecto, Tarea, Comentarios y Dependencias — ver specs/proyectos.md, specs/tareas.md, specs/comentarios-de-tarea.md y specs/dependencias-de-tarea.md
+  focus/          # Modo Foco: FocusSession, Pomodoro (exclusivo plan Pro) — ver specs/modo-foco.md
 config/           # settings, urls, wsgi/asgi del proyecto Django
 specs/            # specs funcionales y técnicas de cada módulo
 commands/         # atajos de shell (ver "Atajo" en la sección de setup) — bash commands/dev.sh help

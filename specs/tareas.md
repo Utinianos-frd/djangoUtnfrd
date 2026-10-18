@@ -1,6 +1,6 @@
 # Tareas (ABM + asignación)
 
-Spec técnico de la entidad `Task`, último nivel de la jerarquía Organización → Grupo → Proyecto → **Tarea**. Cubre RF-25 a RF-29 y RF-31 (ABM, asignación múltiple, cambio de estado, visibilidad por rol). **No incluye** dependencias FS/FF (RF-32 a RF-38) ni comentarios (RF-30) — quedan para tandas siguientes, ver sección 5.
+Spec técnico de la entidad `Task`, último nivel de la jerarquía Organización → Grupo → Proyecto → **Tarea**. Cubre RF-25 a RF-29 y RF-31 (ABM, asignación múltiple, cambio de estado, visibilidad por rol). Comentarios (RF-30) y dependencias FS/FF (RF-32 a RF-37) están implementados en specs aparte: ver [comentarios-de-tarea.md](comentarios-de-tarea.md) y [dependencias-de-tarea.md](dependencias-de-tarea.md).
 
 > Probado end-to-end contra la base Postgres real, incluyendo la cascada Proyecto → Tarea.
 
@@ -28,7 +28,7 @@ Spec técnico de la entidad `Task`, último nivel de la jerarquía Organización
 
 - Tabla: `tasks`.
 - `on_delete=CASCADE` en `project`: si se borra el proyecto, se borran sus tareas (parte de RF-22/RF-28).
-- **`status` con tres valores fijos** (`pending`/`in_progress`/`done`), no definidos explícitamente por el documento pero necesarios para que RF-29 ("cambiar el estado") tenga sentido. Se mantienen genéricos a propósito: cuando se implementen las dependencias (RF-33, RF-35: "bloqueada hasta que la bloqueante esté completada" / "se desbloquea cuando todas sus bloqueantes estén completadas"), `done` es el estado que se va a usar como "completada". No se agregó un estado `blocked` todavía porque el bloqueo es una propiedad derivada de las dependencias (que no existen en esta tanda), no un valor de `status` en sí.
+- **`status` con tres valores fijos** (`pending`/`in_progress`/`done`), no definidos explícitamente por el documento pero necesarios para que RF-29 ("cambiar el estado") tenga sentido. `done` es el estado que usan las dependencias como "completada" (RF-33, RF-35 — ver [dependencias-de-tarea.md](dependencias-de-tarea.md)). No hay un valor `blocked` en `status`: el bloqueo es una propiedad derivada, calculada en el momento (campo `blocked` en el recurso), no un estado persistido.
 - Sin campo `description`: mismo criterio que `Project` (ver [proyectos.md §2](proyectos.md)) — el documento no lo pide y se mantiene el modelo mínimo.
 
 ## 3. Endpoints
@@ -53,7 +53,7 @@ Spec técnico de la entidad `Task`, último nivel de la jerarquía Organización
 
 **Response 201**
 ```json
-{ "data": { "type": "tasks", "id": "1", "attributes": { "title": "Implementar login", "status": "pending", "project_id": 3, "assignee_ids": [5, 8] } } }
+{ "data": { "type": "tasks", "id": "1", "attributes": { "title": "Implementar login", "status": "pending", "project_id": 3, "assignee_ids": [5, 8], "blocked": false } } }
 ```
 
 Si alguno de los asignados queda sobrecargado con esta asignación, la response trae además un bloque `meta.warnings` (no bloquea la creación) — ver [workload.md §4](workload.md).
@@ -80,7 +80,7 @@ Dos caminos según el rol de quien hace el request (RF-27 vs. RF-29):
 
 ### 3.5. `DELETE /tasks/{id}` — eliminar tarea
 
-Solo group lead (RF-28). RF-28 también menciona "se eliminan las dependencias a otras tareas" — no aplica todavía porque no existe el modelo de dependencias.
+Solo group lead (RF-28). RF-28 también menciona "se eliminan las dependencias a otras tareas": cubierto por `on_delete=CASCADE` en `TaskDependency` — ver [dependencias-de-tarea.md](dependencias-de-tarea.md).
 
 ## 4. Decisiones de diseño
 
@@ -90,6 +90,6 @@ Solo group lead (RF-28). RF-28 también menciona "se eliminan las dependencias a
 
 ## 5. Notas sobre el estado actual (explícitamente fuera de esta tanda)
 
-- **Dependencias entre tareas** (RF-32 a RF-38: tipos FS/FF, detección de ciclos, bloqueo de cambio de estado, desbloqueo automático, grafo visual) no están implementadas. `status` ya tiene un `done` que se va a usar como estado "completada" cuando se implementen.
-- **Comentarios** (RF-30) no están implementados — necesitan un modelo `Comment` propio (tarea, autor, texto, fecha) que no se creó en esta tanda.
+- **Dependencias entre tareas** (RF-32 a RF-37) ya están implementadas — ver [dependencias-de-tarea.md](dependencias-de-tarea.md). RF-38 (notificar al desbloquear) sigue pendiente: no hay sistema de notificaciones.
+- **Comentarios** (RF-30) ya están implementados — ver [comentarios-de-tarea.md](comentarios-de-tarea.md).
 - **Notificaciones** (RF-38, notificar al desbloquearse una tarea) no están en el alcance de este proyecto todavía — no hay ningún sistema de notificaciones en el código.
