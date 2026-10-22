@@ -9,6 +9,7 @@ Specs funcionales y técnicas del proyecto en [`specs/`](specs/).
 - Python 3.12 / Django 5.0.4 / Django REST Framework 3.16
 - PostgreSQL 15
 - JWT (`djangorestframework-simplejwt`)
+- pytest + pytest-django
 - Docker + Docker Compose
 - Nginx (solo perfil `prod`)
 
@@ -115,6 +116,15 @@ o desde el Swagger (`/api/v1/docs/`, tag **Dev**). Esto crea una organización d
 
 Logueate con cualquiera de estos vía `POST /api/v1/auth/login`. Es seguro correrlo varias veces (no duplica nada). Esta ruta **solo existe si `DEBUG=True`** (así viene por default en este repo) — detalle completo en [specs/seed-de-datos-de-prueba.md](specs/seed-de-datos-de-prueba.md).
 
+## Pruebas unitarias
+
+```bash
+python -m pytest
+# o: bash commands/dev.sh test
+```
+
+Usa una base de datos de test aparte (se crea y se destruye sola en cada corrida contra el mismo Postgres de `docker-compose`) — no toca los datos de desarrollo. Detalle de convenciones y cobertura actual en [specs/pruebas-unitarias.md](specs/pruebas-unitarias.md).
+
 ## Documentación de la API
 
 Con el servidor corriendo:
@@ -133,9 +143,12 @@ app/
   organizations/  # Organización, Membership, Group, GroupMembership, Workload — ver specs/organizaciones-y-roles.md, specs/grupos_y_roles/grupos-y-roles.md y specs/workload.md
   tasks/          # Proyecto, Tarea, Comentarios y Dependencias — ver specs/proyectos.md, specs/tareas.md, specs/comentarios-de-tarea.md y specs/dependencias-de-tarea.md
   focus/          # Modo Foco: FocusSession, Pomodoro (exclusivo plan Pro) — ver specs/modo-foco.md
+  */tests/        # suite de pytest por app — ver specs/pruebas-unitarias.md
 config/           # settings, urls, wsgi/asgi del proyecto Django
 specs/            # specs funcionales y técnicas de cada módulo
 commands/         # atajos de shell (ver "Atajo" en la sección de setup) — bash commands/dev.sh help
+conftest.py       # fixtures de pytest compartidas entre apps
+pytest.ini        # config de pytest
 ```
 
 ## Perfil de producción (nginx)

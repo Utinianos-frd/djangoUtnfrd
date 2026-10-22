@@ -39,6 +39,10 @@ case "$cmd" in
         python manage.py check
         ;;
 
+    test)
+        python -m pytest "$@"
+        ;;
+
     install)
         pip install -r requirements.txt
         ;;
@@ -63,6 +67,7 @@ Comandos disponibles (bash commands/dev.sh <comando>):
   superuser        Crea un superusuario (para /admin/)
   shell            Abre el shell interactivo de Django
   check            Corre las validaciones de Django (manage.py check)
+  test             Corre la suite de pytest (acepta args, ej: test app/organizations -v)
   install          Instala/actualiza dependencias de requirements.txt
   seed             Puebla datos de prueba (POST /api/v1/dev/seed, requiere 'run' en otra terminal)
   help             Muestra esta ayuda
