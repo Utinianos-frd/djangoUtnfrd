@@ -10,6 +10,7 @@ Specs funcionales y técnicas del proyecto en [`specs/`](specs/).
 - PostgreSQL 15
 - JWT (`djangorestframework-simplejwt`)
 - pytest + pytest-django
+- mypy + django-stubs (type checking)
 - Docker + Docker Compose
 - Nginx (solo perfil `prod`)
 
@@ -125,6 +126,15 @@ python -m pytest
 
 Usa una base de datos de test aparte (se crea y se destruye sola en cada corrida contra el mismo Postgres de `docker-compose`) — no toca los datos de desarrollo. Detalle de convenciones y cobertura actual en [specs/pruebas-unitarias.md](specs/pruebas-unitarias.md).
 
+## Type checking
+
+```bash
+python -m mypy app config
+# o: bash commands/dev.sh typecheck
+```
+
+Análisis estático de tipos (equivalente a PHPStan). Modelos, servicios y vistas de los 4 apps tienen type hints — corre en 0 errores sobre 83 archivos. Detalle de convenciones en [specs/type-checking.md](specs/type-checking.md).
+
 ## Documentación de la API
 
 Con el servidor corriendo:
@@ -149,6 +159,7 @@ specs/            # specs funcionales y técnicas de cada módulo
 commands/         # atajos de shell (ver "Atajo" en la sección de setup) — bash commands/dev.sh help
 conftest.py       # fixtures de pytest compartidas entre apps
 pytest.ini        # config de pytest
+mypy.ini          # config de mypy — ver specs/type-checking.md
 ```
 
 ## Perfil de producción (nginx)

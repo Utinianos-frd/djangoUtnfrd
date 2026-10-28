@@ -1,4 +1,6 @@
+from typing import Any
 from rest_framework.decorators import api_view
+from rest_framework.request import Request
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema
 from ..services.group_service import (
@@ -16,7 +18,7 @@ from ..services.group_service import (
     description='POST requiere ser owner. GET: owner y admin ven todos los grupos; member solo los suyos.',
 )
 @api_view(['GET', 'POST'])
-def groups(request, organization_id):
+def groups(request: Request, organization_id: int) -> Response:
     if request.method == 'POST':
         data, status = crear_grupo(request, organization_id)
     else:
@@ -30,7 +32,8 @@ def groups(request, organization_id):
     description='PATCH y DELETE requieren ser owner de la organización. GET requiere ser owner/admin o miembro del grupo.',
 )
 @api_view(['GET', 'PATCH', 'DELETE'])
-def group_detail(request, organization_id, group_id):
+def group_detail(request: Request, organization_id: int, group_id: int) -> Response:
+    data: dict[str, Any] | None
     if request.method == 'GET':
         data, status = obtener_grupo(request, organization_id, group_id)
     elif request.method == 'PATCH':

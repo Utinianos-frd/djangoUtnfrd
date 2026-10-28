@@ -1,4 +1,8 @@
+from typing import Any, cast
+
 from django.utils import timezone
+from rest_framework.request import Request
+from app.users.models import Users
 from ..models import FocusSession, Pomodoro
 from ..serializers.start_pomodoro_serializer import StartPomodoroSerializer
 from ..serializers.pomodoro_action_serializer import PomodoroActionSerializer
@@ -6,7 +10,8 @@ from .common import error, extract_attributes, serializer_errors
 from .focus_session_service import get_own_session
 
 
-def _pomodoro_resource(pomodoro):
+def _pomodoro_resource(pomodoro: Pomodoro) -> dict[str, Any]:
+    """Recurso JSON:API de un Pomodoro."""
     return {
         "type": "pomodoros",
         "id": str(pomodoro.id),
@@ -20,7 +25,8 @@ def _pomodoro_resource(pomodoro):
     }
 
 
-def _consecutive_completed_count(session):
+def _consecutive_completed_count(session: FocusSession) -> int:
+    """Cuenta los 'completed' más recientes, cortando en el primero que no lo sea (RF-50)."""
     count = 0
     for pomodoro in session.pomodoros.order_by('-started_at'):
         if pomodoro.status != Pomodoro.Status.COMPLETED:
@@ -29,8 +35,9 @@ def _consecutive_completed_count(session):
     return count
 
 
-def iniciar_pomodoro(request, session_id):
-    session = get_own_session(request.user, session_id)
+def iniciar_pomodoro(request: Request, session_id: int) -> tuple[dict[str, Any], int]:
+    """Arranca un pomodoro sobre una tarea de la sesión; solo uno running/paused por sesión a la vez (RF-49)."""
+    session = get_own_session(cast(Users, request.user), session_id)
     if not session:
         return error(404, "Sesión no encontrada")
     if session.status != FocusSession.Status.ACTIVE:
@@ -57,8 +64,9 @@ def iniciar_pomodoro(request, session_id):
     return {"data": _pomodoro_resource(pomodoro)}, 201
 
 
-def actualizar_pomodoro(request, session_id, pomodoro_id):
-    session = get_own_session(request.user, session_id)
+def actualizar_pomodoro(request: Request, session_id: int, pomodoro_id: int) -> tuple[dict[str, Any], int]:
+    """Máquina de estados del pomodoro: pause/resume/cancel/complete. El backend no mide los 25 min, solo valida transiciones."""
+    session = get_own_session(cast(Users, request.user), session_id)
     if not session:
         return error(404, "Sesión no encontrada")
 
@@ -86,6 +94,8 @@ def actualizar_pomodoro(request, session_id, pomodoro_id):
     elif action == 'resume':
         if pomodoro.status != Pomodoro.Status.PAUSED:
             return error(409, "Solo se puede reanudar un pomodoro pausado")
+        # Invariante: todo pomodoro PAUSED tiene paused_at seteado (se setea arriba, en la rama 'pause').
+        assert pomodoro.paused_at is not None
         pomodoro.total_paused_seconds += int((now - pomodoro.paused_at).total_seconds())
         pomodoro.paused_at = None
         pomodoro.status = Pomodoro.Status.RUNNING
@@ -106,7 +116,7 @@ def actualizar_pomodoro(request, session_id, pomodoro_id):
 
     pomodoro.save()
 
-    payload = {"data": _pomodoro_resource(pomodoro)}
+    payload: dict[str, Any] = {"data": _pomodoro_resource(pomodoro)}
     if action == 'complete':
         consecutive = _consecutive_completed_count(session)
         payload["meta"] = {

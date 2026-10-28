@@ -2,6 +2,7 @@ from django.db import models
 
 
 class Group(models.Model):
+    """Subdivisión de una Organization. El líder es quien tiene una GroupMembership con role='group_lead' acá, no un campo propio."""
 
     organization = models.ForeignKey(
         'organizations.Organization',
@@ -14,5 +15,5 @@ class Group(models.Model):
     class Meta:
         db_table = 'groups'
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f'{self.name} ({self.organization})'

@@ -1,4 +1,6 @@
+from typing import Any
 from rest_framework.decorators import api_view
+from rest_framework.request import Request
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema
 from ..services.group_membership_service import (
@@ -15,7 +17,7 @@ from ..services.group_membership_service import (
     description='GET: owner/admin o miembro del grupo. POST: solo el group lead, agrega un Member de la organización como contributor.',
 )
 @api_view(['GET', 'POST'])
-def group_members(request, organization_id, group_id):
+def group_members(request: Request, organization_id: int, group_id: int) -> Response:
     if request.method == 'POST':
         data, status = agregar_miembro_grupo(request, organization_id, group_id)
     else:
@@ -32,7 +34,8 @@ def group_members(request, organization_id, group_id):
     ),
 )
 @api_view(['PATCH', 'DELETE'])
-def group_member_detail(request, organization_id, group_id, user_id):
+def group_member_detail(request: Request, organization_id: int, group_id: int, user_id: int) -> Response:
+    data: dict[str, Any] | None
     if request.method == 'PATCH':
         data, status = cambiar_rol_miembro_grupo(request, organization_id, group_id, user_id)
     else:

@@ -1,10 +1,15 @@
+from typing import Any, cast
+
+from rest_framework.request import Request
+from app.users.models import Users
 from ..models import Organization, Group, GroupMembership, Membership
 from ..serializers.add_group_member_serializer import AddGroupMemberSerializer
 from ..serializers.update_group_member_role_serializer import UpdateGroupMemberRoleSerializer
 from .common import error, extract_attributes, serializer_errors, get_role
 
 
-def _member_resource(membership):
+def _member_resource(membership: GroupMembership) -> dict[str, Any]:
+    """Recurso JSON:API de una GroupMembership, con el username embebido."""
     return {
         "type": "group_memberships",
         "id": str(membership.id),
@@ -16,7 +21,8 @@ def _member_resource(membership):
     }
 
 
-def _get_org_and_group(organization_id, group_id):
+def _get_org_and_group(organization_id: int, group_id: int) -> tuple[Organization | None, Group | None]:
+    """Resuelve (organization, group) por id, o (None, None)/(org, None) si no existen."""
     organization = Organization.objects.filter(id=organization_id).first()
     if not organization:
         return None, None
@@ -24,30 +30,34 @@ def _get_org_and_group(organization_id, group_id):
     return organization, group
 
 
-def _group_role(user, group):
+def _group_role(user: Users, group: Group) -> str | None:
+    """Rol del usuario en este grupo puntual (group_lead/contributor), o None si no pertenece."""
     membership = GroupMembership.objects.filter(group=group, user=user).first()
     return membership.role if membership else None
 
 
-def listar_miembros_grupo(request, organization_id, group_id):
+def listar_miembros_grupo(request: Request, organization_id: int, group_id: int) -> tuple[dict[str, Any], int]:
+    """Owner/admin, o cualquier miembro de este grupo puntual."""
+    user = cast(Users, request.user)
     organization, group = _get_org_and_group(organization_id, group_id)
     if not organization or not group:
         return error(404, "Grupo no encontrado")
 
-    org_role = get_role(request.user, organization)
-    if org_role not in (Membership.Role.OWNER, Membership.Role.ADMIN) and _group_role(request.user, group) is None:
+    org_role = get_role(user, organization)
+    if org_role not in (Membership.Role.OWNER, Membership.Role.ADMIN) and _group_role(user, group) is None:
         return error(403, "No tenés acceso a este grupo")
 
     memberships = GroupMembership.objects.filter(group=group).select_related('user')
     return {"data": [_member_resource(m) for m in memberships]}, 200
 
 
-def agregar_miembro_grupo(request, organization_id, group_id):
+def agregar_miembro_grupo(request: Request, organization_id: int, group_id: int) -> tuple[dict[str, Any], int]:
+    """Group lead agrega a un Member de la organización como contributor (RF-17)."""
     organization, group = _get_org_and_group(organization_id, group_id)
     if not organization or not group:
         return error(404, "Grupo no encontrado")
 
-    if _group_role(request.user, group) != GroupMembership.Role.GROUP_LEAD:
+    if _group_role(cast(Users, request.user), group) != GroupMembership.Role.GROUP_LEAD:
         return error(403, "Solo el group lead puede agregar miembros al grupo")
 
     attributes = extract_attributes(request)
@@ -72,12 +82,15 @@ def agregar_miembro_grupo(request, organization_id, group_id):
     return {"data": _member_resource(membership)}, 201
 
 
-def cambiar_rol_miembro_grupo(request, organization_id, group_id, user_id):
+def cambiar_rol_miembro_grupo(
+    request: Request, organization_id: int, group_id: int, user_id: int,
+) -> tuple[dict[str, Any], int]:
+    """Owner asigna group_lead (RF-15); el lead saliente pasa a contributor. Bootstrapea la membership si no existía."""
     organization, group = _get_org_and_group(organization_id, group_id)
     if not organization or not group:
         return error(404, "Grupo no encontrado")
 
-    if get_role(request.user, organization) != Membership.Role.OWNER:
+    if get_role(cast(Users, request.user), organization) != Membership.Role.OWNER:
         return error(403, "Solo el owner puede asignar el rol de group lead")
 
     if not Membership.objects.filter(organization=organization, user_id=user_id).exists():
@@ -118,12 +131,15 @@ def cambiar_rol_miembro_grupo(request, organization_id, group_id, user_id):
     return {"data": _member_resource(target)}, 200
 
 
-def eliminar_miembro_grupo(request, organization_id, group_id, user_id):
+def eliminar_miembro_grupo(
+    request: Request, organization_id: int, group_id: int, user_id: int,
+) -> tuple[dict[str, Any] | None, int]:
+    """Group lead saca a un miembro del grupo (RF-18); no se puede sacar al propio group lead."""
     organization, group = _get_org_and_group(organization_id, group_id)
     if not organization or not group:
         return error(404, "Grupo no encontrado")
 
-    if _group_role(request.user, group) != GroupMembership.Role.GROUP_LEAD:
+    if _group_role(cast(Users, request.user), group) != GroupMembership.Role.GROUP_LEAD:
         return error(403, "Solo el group lead puede eliminar miembros del grupo")
 
     target = GroupMembership.objects.filter(group=group, user_id=user_id).first()

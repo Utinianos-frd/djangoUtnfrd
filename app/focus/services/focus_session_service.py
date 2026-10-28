@@ -1,4 +1,8 @@
+from typing import Any, cast
+
 from django.utils import timezone
+from rest_framework.request import Request
+from app.users.models import Users
 from app.organizations.models import Organization
 from app.tasks.models import Task
 from ..models import FocusSession, Pomodoro
@@ -6,7 +10,8 @@ from ..serializers.create_session_serializer import CreateFocusSessionSerializer
 from .common import error, extract_attributes, serializer_errors
 
 
-def _session_resource(session):
+def _session_resource(session: FocusSession) -> dict[str, Any]:
+    """Recurso JSON:API de una FocusSession."""
     return {
         "type": "focus_sessions",
         "id": str(session.id),
@@ -20,11 +25,14 @@ def _session_resource(session):
     }
 
 
-def get_own_session(user, session_id):
+def get_own_session(user: Users, session_id: int) -> FocusSession | None:
+    """Una sesión le pertenece solo a su user — no hay rol de organización que dé acceso a la ajena."""
     return FocusSession.objects.filter(id=session_id, user=user).first()
 
 
-def iniciar_sesion(request):
+def iniciar_sesion(request: Request) -> tuple[dict[str, Any], int]:
+    """Crea la sesión si cada tarea está asignada al usuario y su organización es plan Pro (RF-44/8.4)."""
+    user = cast(Users, request.user)
     attributes = extract_attributes(request)
     if attributes is None:
         return error(400, "El body debe seguir la estructura JSON:API: { data: { type, attributes } }")
@@ -33,7 +41,7 @@ def iniciar_sesion(request):
     if not serializer.is_valid():
         return {"errors": serializer_errors(serializer)}, 400
 
-    if FocusSession.objects.filter(user=request.user, status=FocusSession.Status.ACTIVE).exists():
+    if FocusSession.objects.filter(user=user, status=FocusSession.Status.ACTIVE).exists():
         return error(409, "Ya tenés una sesión de modo foco activa")
 
     task_ids = serializer.validated_data['task_ids']
@@ -44,7 +52,7 @@ def iniciar_sesion(request):
         return error(400, "Alguna de las tareas indicadas no existe")
 
     for task in tasks:
-        if not task.assignees.filter(id=request.user.id).exists():
+        if not task.assignees.filter(id=user.id).exists():
             return error(403, f"La tarea '{task.title}' no te fue asignada")
         organization = task.project.group.organization
         if organization.plan != Organization.Plan.PRO:
@@ -53,21 +61,23 @@ def iniciar_sesion(request):
                 f"Modo Foco requiere plan Pro. La organización '{organization.name}' está en plan Free.",
             )
 
-    session = FocusSession.objects.create(user=request.user, goal_text=serializer.validated_data['goal_text'])
+    session = FocusSession.objects.create(user=user, goal_text=serializer.validated_data['goal_text'])
     session.tasks.set(tasks)
 
     return {"data": _session_resource(session)}, 201
 
 
-def obtener_sesion_activa(request):
-    session = FocusSession.objects.filter(user=request.user, status=FocusSession.Status.ACTIVE).first()
+def obtener_sesion_activa(request: Request) -> tuple[dict[str, Any], int]:
+    """Sesión activa del usuario, si tiene una (para que el frontend la recupere al recargar)."""
+    session = FocusSession.objects.filter(user=cast(Users, request.user), status=FocusSession.Status.ACTIVE).first()
     if not session:
         return error(404, "No tenés una sesión de modo foco activa")
     return {"data": _session_resource(session)}, 200
 
 
-def finalizar_sesion(request, session_id):
-    session = get_own_session(request.user, session_id)
+def finalizar_sesion(request: Request, session_id: int) -> tuple[dict[str, Any], int]:
+    """Cierra la sesión (cancela pomodoros colgados) y arma el resumen: tiempo, pomodoros, tareas (RF-53)."""
+    session = get_own_session(cast(Users, request.user), session_id)
     if not session:
         return error(404, "Sesión no encontrada")
 
@@ -86,6 +96,7 @@ def finalizar_sesion(request, session_id):
     worked_seconds = sum(
         max(int((p.completed_at - p.started_at).total_seconds()) - p.total_paused_seconds, 0)
         for p in completed_pomodoros
+        if p.completed_at is not None
     )
     completed_tasks = session.tasks.filter(status=Task.Status.DONE)
 

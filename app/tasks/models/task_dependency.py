@@ -2,10 +2,11 @@ from django.db import models
 
 
 class TaskDependency(models.Model):
+    """blocking_task tiene que completarse antes de que blocked_task pueda avanzar (FS) o completarse (FF)."""
 
     class Type(models.TextChoices):
-        FINISH_TO_START = 'FS', 'Finish to Start'
-        FINISH_TO_FINISH = 'FF', 'Finish to Finish'
+        FINISH_TO_START = 'FS', 'Finish to Start'  # blocked no puede salir de 'pending' hasta que blocking esté 'done'
+        FINISH_TO_FINISH = 'FF', 'Finish to Finish'  # blocked no puede llegar a 'done' hasta que blocking esté 'done'
 
     blocking_task = models.ForeignKey(
         'tasks.Task',
@@ -33,5 +34,5 @@ class TaskDependency(models.Model):
             ),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f'{self.blocking_task_id} -> {self.blocked_task_id} ({self.dependency_type})'

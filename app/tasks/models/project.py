@@ -2,6 +2,7 @@ from django.db import models
 
 
 class Project(models.Model):
+    """Pertenece a un único Group, fijado desde la creación (no hay 'asignar proyecto a grupo' aparte)."""
 
     group = models.ForeignKey(
         'organizations.Group',
@@ -14,5 +15,5 @@ class Project(models.Model):
     class Meta:
         db_table = 'projects'
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f'{self.name} ({self.group})'

@@ -1,4 +1,6 @@
+from typing import Any
 from rest_framework.decorators import api_view
+from rest_framework.request import Request
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema
 from ..services.project_service import (
@@ -16,7 +18,7 @@ from ..services.project_service import (
     description='POST requiere ser owner de la organización. GET requiere ser owner/admin o miembro del grupo.',
 )
 @api_view(['GET', 'POST'])
-def projects(request, organization_id, group_id):
+def projects(request: Request, organization_id: int, group_id: int) -> Response:
     if request.method == 'POST':
         data, status = crear_proyecto(request, organization_id, group_id)
     else:
@@ -30,7 +32,8 @@ def projects(request, organization_id, group_id):
     description='PATCH y DELETE requieren ser owner de la organización. GET requiere ser owner/admin o miembro del grupo.',
 )
 @api_view(['GET', 'PATCH', 'DELETE'])
-def project_detail(request, organization_id, group_id, project_id):
+def project_detail(request: Request, organization_id: int, group_id: int, project_id: int) -> Response:
+    data: dict[str, Any] | None
     if request.method == 'GET':
         data, status = obtener_proyecto(request, organization_id, group_id, project_id)
     elif request.method == 'PATCH':

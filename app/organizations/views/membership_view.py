@@ -1,4 +1,6 @@
+from typing import Any
 from rest_framework.decorators import api_view
+from rest_framework.request import Request
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema
 from ..services.membership_service import listar_miembros, cambiar_rol_miembro, eliminar_miembro
@@ -10,7 +12,7 @@ from ..services.membership_service import listar_miembros, cambiar_rol_miembro, 
     description='Requiere ser miembro de la organización (cualquier rol).',
 )
 @api_view(['GET'])
-def members(request, organization_id):
+def members(request: Request, organization_id: int) -> Response:
     data, status = listar_miembros(request, organization_id)
     return Response(data, status=status)
 
@@ -25,7 +27,8 @@ def members(request, organization_id):
     ),
 )
 @api_view(['PATCH', 'DELETE'])
-def member_detail(request, organization_id, user_id):
+def member_detail(request: Request, organization_id: int, user_id: int) -> Response:
+    data: dict[str, Any] | None
     if request.method == 'PATCH':
         data, status = cambiar_rol_miembro(request, organization_id, user_id)
     else:

@@ -3,6 +3,7 @@ from django.db import models
 
 
 class Task(models.Model):
+    """Unidad de trabajo dentro de un Project, con cero o más asignados (no un único responsable)."""
 
     class Status(models.TextChoices):
         PENDING = 'pending', 'Pending'
@@ -16,7 +17,7 @@ class Task(models.Model):
     )
     title = models.CharField(max_length=255)
     status = models.CharField(max_length=15, choices=Status.choices, default=Status.PENDING)
-    assignees = models.ManyToManyField(
+    assignees = models.ManyToManyField(  # una tarea puede tener varios responsables a la vez (RF-26)
         settings.AUTH_USER_MODEL,
         related_name='assigned_tasks',
         blank=True,
@@ -26,5 +27,5 @@ class Task(models.Model):
     class Meta:
         db_table = 'tasks'
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.title

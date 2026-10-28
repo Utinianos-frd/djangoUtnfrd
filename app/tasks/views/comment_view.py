@@ -1,4 +1,5 @@
 from rest_framework.decorators import api_view
+from rest_framework.request import Request
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema
 from ..services.comment_service import listar_comentarios, crear_comentario
@@ -13,7 +14,7 @@ from ..services.comment_service import listar_comentarios, crear_comentario
     ),
 )
 @api_view(['GET', 'POST'])
-def comments(request, organization_id, group_id, project_id, task_id):
+def comments(request: Request, organization_id: int, group_id: int, project_id: int, task_id: int) -> Response:
     if request.method == 'POST':
         data, status = crear_comentario(request, organization_id, group_id, project_id, task_id)
     else:

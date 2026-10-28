@@ -1,4 +1,5 @@
 from rest_framework.decorators import api_view
+from rest_framework.request import Request
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema
 from ..services.pomodoro_service import iniciar_pomodoro, actualizar_pomodoro
@@ -10,7 +11,7 @@ from ..services.pomodoro_service import iniciar_pomodoro, actualizar_pomodoro
     description='task_id tiene que ser una de las tareas elegidas al iniciar la sesión.',
 )
 @api_view(['POST'])
-def pomodoros(request, session_id):
+def pomodoros(request: Request, session_id: int) -> Response:
     data, status = iniciar_pomodoro(request, session_id)
     return Response(data, status=status)
 
@@ -25,6 +26,6 @@ def pomodoros(request, session_id):
     ),
 )
 @api_view(['PATCH'])
-def pomodoro_detail(request, session_id, pomodoro_id):
+def pomodoro_detail(request: Request, session_id: int, pomodoro_id: int) -> Response:
     data, status = actualizar_pomodoro(request, session_id, pomodoro_id)
     return Response(data, status=status)

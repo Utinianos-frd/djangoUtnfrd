@@ -3,6 +3,7 @@ from django.db import models
 
 
 class FocusSession(models.Model):
+    """Sesión de Modo Foco de un usuario sobre un set de tareas elegido de antemano (exclusivo plan Pro)."""
 
     class Status(models.TextChoices):
         ACTIVE = 'active', 'Active'
@@ -26,8 +27,8 @@ class FocusSession(models.Model):
                 fields=['user'],
                 condition=models.Q(status='active'),
                 name='unique_active_focus_session_per_user',
-            ),
+            ),  # nunca dos sesiones activas a la vez para el mismo usuario
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f'{self.user} @ {self.started_at}'

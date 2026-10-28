@@ -1,9 +1,14 @@
+from typing import Any, cast
+
+from rest_framework.request import Request
+from app.users.models import Users
 from ..models import Organization, Membership
 from ..serializers.update_member_role_serializer import UpdateMemberRoleSerializer
 from .common import error, extract_attributes, serializer_errors, get_role
 
 
-def _member_resource(membership):
+def _member_resource(membership: Membership) -> dict[str, Any]:
+    """Recurso JSON:API de una Membership, con el username embebido para no obligar al frontend a resolverlo aparte."""
     return {
         "type": "memberships",
         "id": str(membership.id),
@@ -15,24 +20,26 @@ def _member_resource(membership):
     }
 
 
-def listar_miembros(request, organization_id):
+def listar_miembros(request: Request, organization_id: int) -> tuple[dict[str, Any], int]:
+    """Lista los miembros de la organización; visible para cualquier miembro, no solo owner/admin."""
     organization = Organization.objects.filter(id=organization_id).first()
     if not organization:
         return error(404, "Organización no encontrada")
 
-    if get_role(request.user, organization) is None:
+    if get_role(cast(Users, request.user), organization) is None:
         return error(403, "No pertenecés a esta organización")
 
     memberships = Membership.objects.filter(organization=organization).select_related('user')
     return {"data": [_member_resource(m) for m in memberships]}, 200
 
 
-def cambiar_rol_miembro(request, organization_id, user_id):
+def cambiar_rol_miembro(request: Request, organization_id: int, user_id: int) -> tuple[dict[str, Any], int]:
+    """Cambia el rol de un miembro (solo owner); asignar 'owner' traspasa el puesto y demueve al owner saliente a admin."""
     organization = Organization.objects.filter(id=organization_id).first()
     if not organization:
         return error(404, "Organización no encontrada")
 
-    if get_role(request.user, organization) != Membership.Role.OWNER:
+    if get_role(cast(Users, request.user), organization) != Membership.Role.OWNER:
         return error(403, "Solo el owner puede cambiar roles")
 
     target = Membership.objects.filter(organization=organization, user_id=user_id).first()
@@ -66,12 +73,13 @@ def cambiar_rol_miembro(request, organization_id, user_id):
     return {"data": _member_resource(target)}, 200
 
 
-def eliminar_miembro(request, organization_id, user_id):
+def eliminar_miembro(request: Request, organization_id: int, user_id: int) -> tuple[dict[str, Any] | None, int]:
+    """Saca a un miembro de la organización (owner o admin); no se puede eliminar al owner directamente."""
     organization = Organization.objects.filter(id=organization_id).first()
     if not organization:
         return error(404, "Organización no encontrada")
 
-    if get_role(request.user, organization) not in (Membership.Role.OWNER, Membership.Role.ADMIN):
+    if get_role(cast(Users, request.user), organization) not in (Membership.Role.OWNER, Membership.Role.ADMIN):
         return error(403, "No tenés permiso para eliminar miembros")
 
     target = Membership.objects.filter(organization=organization, user_id=user_id).first()

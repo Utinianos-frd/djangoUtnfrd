@@ -1,4 +1,5 @@
 from rest_framework.decorators import api_view
+from rest_framework.request import Request
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema
 from ..services.workload_service import obtener_panel_workload, obtener_detalle_miembro
@@ -14,7 +15,7 @@ from ..services.workload_service import obtener_panel_workload, obtener_detalle_
     ),
 )
 @api_view(['GET'])
-def workload(request, organization_id, group_id):
+def workload(request: Request, organization_id: int, group_id: int) -> Response:
     data, status = obtener_panel_workload(request, organization_id, group_id)
     return Response(data, status=status)
 
@@ -24,6 +25,6 @@ def workload(request, organization_id, group_id):
     summary='Detalle de tareas activas de un miembro del grupo (RF-45)',
 )
 @api_view(['GET'])
-def workload_member_detail(request, organization_id, group_id, user_id):
+def workload_member_detail(request: Request, organization_id: int, group_id: int, user_id: int) -> Response:
     data, status = obtener_detalle_miembro(request, organization_id, group_id, user_id)
     return Response(data, status=status)

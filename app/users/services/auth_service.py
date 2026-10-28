@@ -1,22 +1,27 @@
+from typing import Any
 from django.contrib.auth import authenticate
+from rest_framework.request import Request
 from rest_framework_simplejwt.tokens import RefreshToken
 from ..models.users import Users
 from ..serializers.register_serializer import RegisterSerializer
 from datetime import datetime, timezone
 
 
-def _error(status_code, detail):
+def _error(status_code: int, detail: str) -> tuple[dict[str, Any], int]:
+    """Arma un error en formato JSON:API: { errors: [{ status, detail }] }."""
     return {"errors": [{"status": str(status_code), "detail": detail}]}, status_code
 
 
-def _extract_attributes(request):
+def _extract_attributes(request: Request) -> dict[str, Any] | None:
+    """Saca request.data['data']['attributes'] del body JSON:API, o None si no tiene esa forma."""
     try:
         return request.data['data']['attributes']
     except (KeyError, TypeError):
         return None
 
 
-def login_usuario(request):
+def login_usuario(request: Request) -> tuple[dict[str, Any], int]:
+    """Autentica username+password y devuelve un par de tokens JWT (access/refresh)."""
     attributes = _extract_attributes(request)
     if attributes is None:
         return _error(400, "El body debe seguir la estructura JSON:API: { data: { type, attributes } }")
@@ -45,7 +50,8 @@ def login_usuario(request):
     }, 200
 
 
-def register_usuario(request):
+def register_usuario(request: Request) -> tuple[dict[str, Any], int]:
+    """Crea un Users nuevo (username/email únicos) y lo loguea de una, devolviendo tokens JWT."""
     attributes = _extract_attributes(request)
     if attributes is None:
         return _error(400, "El body debe seguir la estructura JSON:API: { data: { type, attributes } }")
@@ -85,7 +91,8 @@ def register_usuario(request):
     }, 201
 
 
-def get_perfil_usuario(user):
+def get_perfil_usuario(user: Users) -> dict[str, Any]:
+    """Serializa el perfil del usuario autenticado para GET /auth/me."""
     return {
         "data": {
             "type": "users",

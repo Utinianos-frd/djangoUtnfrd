@@ -1,6 +1,9 @@
+from typing import cast
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.request import Request
 from rest_framework.response import Response
+from ..models.users import Users
 from drf_spectacular.utils import extend_schema, OpenApiExample, OpenApiResponse
 from drf_spectacular.types import OpenApiTypes
 from ..services.auth_service import login_usuario, register_usuario, get_perfil_usuario
@@ -66,7 +69,8 @@ _JSONAPI_ERROR_EXAMPLE = OpenApiExample(
 )
 @api_view(['POST'])
 @permission_classes([AllowAny])
-def login(request):
+def login(request: Request) -> Response:
+    """POST /auth/login — wrapper fino sobre auth_service.login_usuario."""
     data, status = login_usuario(request)
     return Response(data, status=status)
 
@@ -134,7 +138,8 @@ def login(request):
 )
 @api_view(['POST'])
 @permission_classes([AllowAny])
-def register(request):
+def register(request: Request) -> Response:
+    """POST /auth/register — wrapper fino sobre auth_service.register_usuario."""
     data, status = register_usuario(request)
     return Response(data, status=status)
 
@@ -169,6 +174,7 @@ def register(request):
 )
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def me(request):
-    data = get_perfil_usuario(request.user)
+def me(request: Request) -> Response:
+    """GET /auth/me — wrapper fino sobre auth_service.get_perfil_usuario."""
+    data = get_perfil_usuario(cast(Users, request.user))
     return Response(data, status=200)

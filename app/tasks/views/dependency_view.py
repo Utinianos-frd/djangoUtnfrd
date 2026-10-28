@@ -1,4 +1,5 @@
 from rest_framework.decorators import api_view
+from rest_framework.request import Request
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema
 from ..services.dependency_service import crear_dependencia, listar_dependencias, eliminar_dependencia
@@ -15,7 +16,7 @@ from ..services.dependency_service import crear_dependencia, listar_dependencias
     ),
 )
 @api_view(['GET', 'POST'])
-def dependencies(request, organization_id, group_id, project_id):
+def dependencies(request: Request, organization_id: int, group_id: int, project_id: int) -> Response:
     if request.method == 'POST':
         data, status = crear_dependencia(request, organization_id, group_id, project_id)
     else:
@@ -29,6 +30,8 @@ def dependencies(request, organization_id, group_id, project_id):
     description='Solo el group lead.',
 )
 @api_view(['DELETE'])
-def dependency_detail(request, organization_id, group_id, project_id, dependency_id):
+def dependency_detail(
+    request: Request, organization_id: int, group_id: int, project_id: int, dependency_id: int,
+) -> Response:
     data, status = eliminar_dependencia(request, organization_id, group_id, project_id, dependency_id)
     return Response(data, status=status)

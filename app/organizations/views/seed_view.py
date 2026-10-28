@@ -1,5 +1,6 @@
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
+from rest_framework.request import Request
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, OpenApiExample, OpenApiResponse
 from ..services.seed_service import run_seed
@@ -34,6 +35,6 @@ from ..services.seed_service import run_seed
 )
 @api_view(['POST'])
 @permission_classes([AllowAny])
-def seed(request):
+def seed(request: Request) -> Response:
     data = run_seed()
     return Response(data, status=200)

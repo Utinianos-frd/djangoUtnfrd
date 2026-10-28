@@ -1,10 +1,12 @@
+from typing import Any
+
 from app.users.models import Users
 from ..models import Organization, Membership, Group, GroupMembership
 
 _ORG_NAME = 'Tasker Demo'
 _GROUP_NAME = 'Backend'
 
-_USERS = [
+_USERS: list[dict[str, str]] = [
     {'username': 'owner', 'org_role': Membership.Role.OWNER},
     {'username': 'admin', 'org_role': Membership.Role.ADMIN},
     {'username': 'member', 'org_role': Membership.Role.MEMBER},
@@ -13,11 +15,13 @@ _USERS = [
 ]
 
 
-def _password_for(username):
+def _password_for(username: str) -> str:
+    """Password determinística por username, así siempre es predecible para el equipo."""
     return f'{username}123'
 
 
-def _get_or_create_user(username):
+def _get_or_create_user(username: str) -> Users:
+    """Crea el usuario si no existe y siempre resetea su password (idempotente, ver specs/seed-de-datos-de-prueba.md)."""
     user, created = Users.objects.get_or_create(
         username=username,
         defaults={'email': f'{username}@tasker.test', 'role': 'user'},
@@ -27,11 +31,12 @@ def _get_or_create_user(username):
     return user
 
 
-def run_seed():
+def run_seed() -> dict[str, Any]:
+    """Crea (o reutiliza) la org/grupo demo con un usuario por cada rol del sistema; solo con DEBUG=True."""
     organization, _ = Organization.objects.get_or_create(name=_ORG_NAME)
     group, _ = Group.objects.get_or_create(organization=organization, name=_GROUP_NAME)
 
-    credentials = []
+    credentials: list[dict[str, Any]] = []
     for entry in _USERS:
         username = entry['username']
         user = _get_or_create_user(username)

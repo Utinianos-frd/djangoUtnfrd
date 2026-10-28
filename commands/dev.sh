@@ -43,6 +43,14 @@ case "$cmd" in
         python -m pytest "$@"
         ;;
 
+    typecheck)
+        if [ "$#" -eq 0 ]; then
+            python -m mypy app config
+        else
+            python -m mypy "$@"
+        fi
+        ;;
+
     install)
         pip install -r requirements.txt
         ;;
@@ -68,6 +76,7 @@ Comandos disponibles (bash commands/dev.sh <comando>):
   shell            Abre el shell interactivo de Django
   check            Corre las validaciones de Django (manage.py check)
   test             Corre la suite de pytest (acepta args, ej: test app/organizations -v)
+  typecheck        Corre mypy sobre app/ y config/ (acepta args, ej: typecheck app/organizations)
   install          Instala/actualiza dependencias de requirements.txt
   seed             Puebla datos de prueba (POST /api/v1/dev/seed, requiere 'run' en otra terminal)
   help             Muestra esta ayuda

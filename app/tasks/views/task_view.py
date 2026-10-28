@@ -1,4 +1,6 @@
+from typing import Any
 from rest_framework.decorators import api_view
+from rest_framework.request import Request
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema
 from ..services.task_service import (
@@ -20,7 +22,7 @@ from ..services.task_service import (
     ),
 )
 @api_view(['GET', 'POST'])
-def tasks(request, organization_id, group_id, project_id):
+def tasks(request: Request, organization_id: int, group_id: int, project_id: int) -> Response:
     if request.method == 'POST':
         data, status = crear_tarea(request, organization_id, group_id, project_id)
     else:
@@ -39,7 +41,8 @@ def tasks(request, organization_id, group_id, project_id):
     ),
 )
 @api_view(['GET', 'PATCH', 'DELETE'])
-def task_detail(request, organization_id, group_id, project_id, task_id):
+def task_detail(request: Request, organization_id: int, group_id: int, project_id: int, task_id: int) -> Response:
+    data: dict[str, Any] | None
     if request.method == 'GET':
         data, status = obtener_tarea(request, organization_id, group_id, project_id, task_id)
     elif request.method == 'PATCH':

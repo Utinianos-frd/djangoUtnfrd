@@ -1,5 +1,8 @@
 import uuid
+from typing import Any, cast
 
+from rest_framework.request import Request
+from app.users.models import Users
 from ..models import Organization, Membership
 from ..serializers.create_organization_serializer import CreateOrganizationSerializer
 from ..serializers.update_organization_serializer import UpdateOrganizationSerializer
@@ -7,7 +10,8 @@ from ..serializers.join_serializer import JoinSerializer
 from .common import error, extract_attributes, serializer_errors, get_role
 
 
-def _organization_resource(organization, role):
+def _organization_resource(organization: Organization, role: str | None) -> dict[str, Any]:
+    """Arma el recurso JSON:API de una Organization; 'role' es el rol del usuario que pide, no un campo del modelo."""
     return {
         "type": "organizations",
         "id": str(organization.id),
@@ -22,11 +26,13 @@ def _organization_resource(organization, role):
     }
 
 
-def _organization_response(organization, user):
+def _organization_response(organization: Organization, user: Users) -> dict[str, Any]:
+    """Resuelve el rol de 'user' en 'organization' y arma la response completa."""
     return {"data": _organization_resource(organization, get_role(user, organization))}
 
 
-def _invite_response(organization):
+def _invite_response(organization: Organization) -> dict[str, Any]:
+    """Recurso JSON:API del link de invitación actual de la organización."""
     return {
         "data": {
             "type": "invitations",
@@ -39,7 +45,9 @@ def _invite_response(organization):
     }
 
 
-def crear_organizacion(request):
+def crear_organizacion(request: Request) -> tuple[dict[str, Any], int]:
+    """Crea la Organization y, en la misma operación, la Membership de owner del usuario que la crea (RF-08)."""
+    user = cast(Users, request.user)
     attributes = extract_attributes(request)
     if attributes is None:
         return error(400, "El body debe seguir la estructura JSON:API: { data: { type, attributes } }")
@@ -52,34 +60,39 @@ def crear_organizacion(request):
         name=serializer.validated_data['name'],
         logo_url=serializer.validated_data.get('logo_url', ''),
     )
-    Membership.objects.create(organization=organization, user=request.user, role=Membership.Role.OWNER)
+    Membership.objects.create(organization=organization, user=user, role=Membership.Role.OWNER)
 
-    return _organization_response(organization, request.user), 201
+    return _organization_response(organization, user), 201
 
 
-def listar_organizaciones(request):
-    memberships = Membership.objects.filter(user=request.user).select_related('organization')
+def listar_organizaciones(request: Request) -> tuple[dict[str, Any], int]:
+    """Organizaciones donde el usuario tiene una Membership, con su rol en cada una."""
+    memberships = Membership.objects.filter(user=cast(Users, request.user)).select_related('organization')
     data = [_organization_resource(m.organization, m.role) for m in memberships]
     return {"data": data}, 200
 
 
-def obtener_organizacion(request, organization_id):
+def obtener_organizacion(request: Request, organization_id: int) -> tuple[dict[str, Any], int]:
+    """Detalle de una organización; requiere ser miembro (cualquier rol)."""
+    user = cast(Users, request.user)
     organization = Organization.objects.filter(id=organization_id).first()
     if not organization:
         return error(404, "Organización no encontrada")
 
-    if get_role(request.user, organization) is None:
+    if get_role(user, organization) is None:
         return error(403, "No pertenecés a esta organización")
 
-    return _organization_response(organization, request.user), 200
+    return _organization_response(organization, user), 200
 
 
-def actualizar_organizacion(request, organization_id):
+def actualizar_organizacion(request: Request, organization_id: int) -> tuple[dict[str, Any], int]:
+    """PATCH parcial de name/logo_url/overload_threshold; solo el owner puede llamarlo."""
+    user = cast(Users, request.user)
     organization = Organization.objects.filter(id=organization_id).first()
     if not organization:
         return error(404, "Organización no encontrada")
 
-    if get_role(request.user, organization) != Membership.Role.OWNER:
+    if get_role(user, organization) != Membership.Role.OWNER:
         return error(403, "Solo el owner puede modificar la organización")
 
     attributes = extract_attributes(request)
@@ -103,38 +116,41 @@ def actualizar_organizacion(request, organization_id):
     if changed:
         organization.save()
 
-    return _organization_response(organization, request.user), 200
+    return _organization_response(organization, user), 200
 
 
-def eliminar_organizacion(request, organization_id):
+def eliminar_organizacion(request: Request, organization_id: int) -> tuple[dict[str, Any] | None, int]:
+    """Borra la organización (y en cascada sus Membership/Group/GroupMembership/Project/...); solo owner."""
     organization = Organization.objects.filter(id=organization_id).first()
     if not organization:
         return error(404, "Organización no encontrada")
 
-    if get_role(request.user, organization) != Membership.Role.OWNER:
+    if get_role(cast(Users, request.user), organization) != Membership.Role.OWNER:
         return error(403, "Solo el owner puede eliminar la organización")
 
     organization.delete()
     return None, 204
 
 
-def ver_invitacion(request, organization_id):
+def ver_invitacion(request: Request, organization_id: int) -> tuple[dict[str, Any], int]:
+    """Muestra el token/estado del link de invitación; owner o admin."""
     organization = Organization.objects.filter(id=organization_id).first()
     if not organization:
         return error(404, "Organización no encontrada")
 
-    if get_role(request.user, organization) not in (Membership.Role.OWNER, Membership.Role.ADMIN):
+    if get_role(cast(Users, request.user), organization) not in (Membership.Role.OWNER, Membership.Role.ADMIN):
         return error(403, "No tenés permiso para ver el link de invitación")
 
     return _invite_response(organization), 200
 
 
-def regenerar_invitacion(request, organization_id):
+def regenerar_invitacion(request: Request, organization_id: int) -> tuple[dict[str, Any], int]:
+    """Invalida el token actual y genera uno nuevo; solo owner."""
     organization = Organization.objects.filter(id=organization_id).first()
     if not organization:
         return error(404, "Organización no encontrada")
 
-    if get_role(request.user, organization) != Membership.Role.OWNER:
+    if get_role(cast(Users, request.user), organization) != Membership.Role.OWNER:
         return error(403, "Solo el owner puede regenerar el link de invitación")
 
     organization.invite_token = uuid.uuid4()
@@ -144,12 +160,13 @@ def regenerar_invitacion(request, organization_id):
     return _invite_response(organization), 200
 
 
-def desactivar_invitacion(request, organization_id):
+def desactivar_invitacion(request: Request, organization_id: int) -> tuple[dict[str, Any], int]:
+    """Apaga el link sin tocar el token (se puede reactivar regenerando); solo owner."""
     organization = Organization.objects.filter(id=organization_id).first()
     if not organization:
         return error(404, "Organización no encontrada")
 
-    if get_role(request.user, organization) != Membership.Role.OWNER:
+    if get_role(cast(Users, request.user), organization) != Membership.Role.OWNER:
         return error(403, "Solo el owner puede desactivar el link de invitación")
 
     organization.invite_active = False
@@ -158,7 +175,9 @@ def desactivar_invitacion(request, organization_id):
     return _invite_response(organization), 200
 
 
-def unirse_a_organizacion(request):
+def unirse_a_organizacion(request: Request) -> tuple[dict[str, Any], int]:
+    """Resuelve el token y crea una Membership(role='member') para quien se une (RF-11/12)."""
+    user = cast(Users, request.user)
     attributes = extract_attributes(request)
     if attributes is None:
         return error(400, "El body debe seguir la estructura JSON:API: { data: { type, attributes } }")
@@ -174,10 +193,10 @@ def unirse_a_organizacion(request):
 
     membership, created = Membership.objects.get_or_create(
         organization=organization,
-        user=request.user,
+        user=user,
         defaults={'role': Membership.Role.MEMBER},
     )
     if not created:
         return error(409, "Ya pertenecés a esta organización")
 
-    return _organization_response(organization, request.user), 201
+    return _organization_response(organization, user), 201

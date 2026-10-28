@@ -1,4 +1,6 @@
+from typing import Any
 from rest_framework.decorators import api_view
+from rest_framework.request import Request
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema
 from ..services.organization_service import (
@@ -23,7 +25,7 @@ from ..services.organization_service import (
     ),
 )
 @api_view(['GET', 'POST'])
-def organizations(request):
+def organizations(request: Request) -> Response:
     if request.method == 'POST':
         data, status = crear_organizacion(request)
     else:
@@ -37,7 +39,8 @@ def organizations(request):
     description='PATCH y DELETE requieren ser owner de la organización. GET requiere ser miembro.',
 )
 @api_view(['GET', 'PATCH', 'DELETE'])
-def organization_detail(request, organization_id):
+def organization_detail(request: Request, organization_id: int) -> Response:
+    data: dict[str, Any] | None
     if request.method == 'GET':
         data, status = obtener_organizacion(request, organization_id)
     elif request.method == 'PATCH':
@@ -53,7 +56,7 @@ def organization_detail(request, organization_id):
     description='Requiere ser owner o admin de la organización.',
 )
 @api_view(['GET'])
-def invite_detail(request, organization_id):
+def invite_detail(request: Request, organization_id: int) -> Response:
     data, status = ver_invitacion(request, organization_id)
     return Response(data, status=status)
 
@@ -64,7 +67,7 @@ def invite_detail(request, organization_id):
     description='Invalida el link anterior y genera un token nuevo. Requiere ser owner.',
 )
 @api_view(['POST'])
-def invite_regenerate(request, organization_id):
+def invite_regenerate(request: Request, organization_id: int) -> Response:
     data, status = regenerar_invitacion(request, organization_id)
     return Response(data, status=status)
 
@@ -75,7 +78,7 @@ def invite_regenerate(request, organization_id):
     description='Requiere ser owner.',
 )
 @api_view(['POST'])
-def invite_deactivate(request, organization_id):
+def invite_deactivate(request: Request, organization_id: int) -> Response:
     data, status = desactivar_invitacion(request, organization_id)
     return Response(data, status=status)
 
@@ -86,6 +89,6 @@ def invite_deactivate(request, organization_id):
     description='El usuario autenticado queda como member de la organización dueña del token.',
 )
 @api_view(['POST'])
-def join(request):
+def join(request: Request) -> Response:
     data, status = unirse_a_organizacion(request)
     return Response(data, status=status)

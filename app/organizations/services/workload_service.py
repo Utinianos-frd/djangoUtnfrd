@@ -1,11 +1,17 @@
+from typing import Any, cast
+
+from django.db.models import QuerySet
+from rest_framework.request import Request
+from app.users.models import Users
 from app.tasks.models import Task
 from ..models import Organization, Group, GroupMembership, Membership
 from .common import error, get_role
 
-ACTIVE_STATUSES = (Task.Status.PENDING, Task.Status.IN_PROGRESS)
+ACTIVE_STATUSES = (Task.Status.PENDING, Task.Status.IN_PROGRESS)  # 'done' no cuenta para la carga de nadie
 
 
-def _get_org_and_group(organization_id, group_id):
+def _get_org_and_group(organization_id: int, group_id: int) -> tuple[Organization | None, Group | None]:
+    """Resuelve (organization, group) por id, o (None, None)/(org, None) si no existen."""
     organization = Organization.objects.filter(id=organization_id).first()
     if not organization:
         return None, None
@@ -13,7 +19,8 @@ def _get_org_and_group(organization_id, group_id):
     return organization, group
 
 
-def _can_view_workload(user, organization, group):
+def _can_view_workload(user: Users, organization: Organization, group: Group) -> bool:
+    """Owner/admin (oversight) o el group lead de este grupo puntual — RF-39."""
     role = get_role(user, organization)
     if role in (Membership.Role.OWNER, Membership.Role.ADMIN):
         return True
@@ -22,15 +29,18 @@ def _can_view_workload(user, organization, group):
     ).exists()
 
 
-def tareas_activas_qs(user):
+def tareas_activas_qs(user: Users) -> QuerySet[Task]:
+    """Tareas activas del usuario en TODOS los grupos donde participa — la carga es global (RF-40)."""
     return Task.objects.filter(assignees=user, status__in=ACTIVE_STATUSES).select_related('project').distinct()
 
 
-def carga_activa(user):
+def carga_activa(user: Users) -> int:
+    """Cantidad de tareas activas del usuario, global (ver tareas_activas_qs)."""
     return tareas_activas_qs(user).count()
 
 
-def clasificar(active_task_count, threshold):
+def clasificar(active_task_count: int, threshold: int) -> str:
+    """Clasifica según el umbral de la organización: available (0) / busy / overloaded (>= threshold)."""
     if active_task_count == 0:
         return 'available'
     if active_task_count >= threshold:
@@ -38,7 +48,8 @@ def clasificar(active_task_count, threshold):
     return 'busy'
 
 
-def _member_workload_resource(membership, threshold):
+def _member_workload_resource(membership: GroupMembership, threshold: int) -> dict[str, Any]:
+    """Recurso JSON:API de la fila de workload de un miembro del grupo."""
     count = carga_activa(membership.user)
     return {
         "type": "workload",
@@ -53,12 +64,14 @@ def _member_workload_resource(membership, threshold):
     }
 
 
-def obtener_panel_workload(request, organization_id, group_id):
+def obtener_panel_workload(request: Request, organization_id: int, group_id: int) -> tuple[dict[str, Any], int]:
+    """Panel de carga de cada miembro del grupo (RF-39/40/41)."""
+    user = cast(Users, request.user)
     organization, group = _get_org_and_group(organization_id, group_id)
     if not organization or not group:
         return error(404, "Grupo no encontrado")
 
-    if not _can_view_workload(request.user, organization, group):
+    if not _can_view_workload(user, organization, group):
         return error(403, "No tenés permiso para ver el workload de este grupo")
 
     memberships = GroupMembership.objects.filter(group=group).select_related('user')
@@ -66,12 +79,16 @@ def obtener_panel_workload(request, organization_id, group_id):
     return {"data": data}, 200
 
 
-def obtener_detalle_miembro(request, organization_id, group_id, user_id):
+def obtener_detalle_miembro(
+    request: Request, organization_id: int, group_id: int, user_id: int,
+) -> tuple[dict[str, Any], int]:
+    """Detalle de tareas activas de un miembro, incluso de otros grupos (RF-45)."""
+    user = cast(Users, request.user)
     organization, group = _get_org_and_group(organization_id, group_id)
     if not organization or not group:
         return error(404, "Grupo no encontrado")
 
-    if not _can_view_workload(request.user, organization, group):
+    if not _can_view_workload(user, organization, group):
         return error(403, "No tenés permiso para ver el workload de este grupo")
 
     membership = GroupMembership.objects.filter(group=group, user_id=user_id).select_related('user').first()
@@ -105,14 +122,15 @@ def obtener_detalle_miembro(request, organization_id, group_id, user_id):
     }, 200
 
 
-def advertencias_de_asignacion(organization, group, assignee_ids):
-    """RF-42/43: devuelve advertencias (no bloqueantes) para assignee_ids que queden sobrecargados,
-    con miembros disponibles del mismo grupo como alternativa sugerida."""
+def advertencias_de_asignacion(
+    organization: Organization, group: Group, assignee_ids: list[int],
+) -> list[dict[str, Any]]:
+    """Advertencias no bloqueantes (RF-42) para assignees que queden sobrecargados, con alternativas (RF-43)."""
     if not assignee_ids:
         return []
 
     threshold = organization.overload_threshold
-    warnings = []
+    warnings: list[dict[str, Any]] = []
 
     for user_id in assignee_ids:
         membership = GroupMembership.objects.filter(group=group, user_id=user_id).select_related('user').first()
