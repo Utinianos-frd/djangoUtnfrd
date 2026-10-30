@@ -133,7 +133,7 @@ python -m mypy app config
 # o: bash commands/dev.sh typecheck
 ```
 
-Análisis estático de tipos (equivalente a PHPStan). Modelos, servicios y vistas de los 4 apps tienen type hints — corre en 0 errores sobre 83 archivos. Detalle de convenciones en [specs/type-checking.md](specs/type-checking.md).
+Análisis estático de tipos (equivalente a PHPStan). Modelos, servicios y vistas de los 4 apps tienen type hints — corre en 0 errores sobre 93 archivos. Detalle de convenciones en [specs/type-checking.md](specs/type-checking.md).
 
 ## Documentación de la API
 
@@ -174,6 +174,6 @@ Este flujo no está pensado para desarrollo local día a día — es para probar
 
 ## Troubleshooting
 
-- **El contenedor `web` figura como "unhealthy"**: el healthcheck de `docker-compose.yml` pega contra `http://localhost:8000/health/`, un endpoint que todavía no está implementado en la app. Es un falso positivo conocido — no afecta que el servidor responda en `/`; se puede ignorar mientras no se agregue ese endpoint.
+- **El contenedor `web` figura como "unhealthy"**: el healthcheck de `docker-compose.yml` pega contra `http://localhost:8000/health/`, que responde `200` si Django está arriba y llega a Postgres (`503` si no llega a la base). En modo desarrollo el contenedor arranca con `sleep infinity`, así que figura "unhealthy" hasta que levantes el server con `bash commands/dev.sh run` — es esperado.
 - **Error de conexión a Postgres**: verificar que `.env` tenga `POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB` completos y que coincidan con lo que Django lee en `config/settings.py`.
 - **Puerto 8000 o 5432 ocupado en el host**: liberar el puerto o cambiar el mapeo en `docker-compose.override.yml`.

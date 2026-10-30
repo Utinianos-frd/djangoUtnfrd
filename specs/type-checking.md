@@ -2,7 +2,7 @@
 
 Spec de la herramienta de análisis estático instalada en el proyecto — el equivalente a PHPStan en el mundo Python. Tooling de calidad interna, no un requerimiento del documento de Tasker, documentado igual por la misma práctica que el resto de `specs/`.
 
-> Dos tandas: primero instalación y configuración (sin tocar código). Después, a pedido explícito, se tiparon las firmas de los 4 apps completos (modelos, servicios, vistas) — ver sección 5. `python -m mypy app config` corre hoy **sin errores** sobre 83 archivos.
+> Dos tandas: primero instalación y configuración (sin tocar código). Después, a pedido explícito, se tiparon las firmas de los 4 apps completos (modelos, servicios, vistas) — ver sección 5. `python -m mypy app config` corre hoy **sin errores** sobre 93 archivos.
 
 ## 1. Qué se instaló
 
@@ -74,7 +74,7 @@ Los tres se verificaron con `manage.py check`, la suite completa de pytest, y sm
 
 ## 6. Notas sobre el estado actual
 
-- `python -m mypy app config` da `Success: no issues found in 83 source files` — cero errores en todo el proyecto.
+- `python -m mypy app config` da `Success: no issues found in 93 source files` — cero errores en todo el proyecto.
 - No está integrado a `commands/dev.sh test` ni corre junto a pytest — es un comando aparte (`typecheck`), a propósito: son herramientas con objetivos distintos (pytest verifica comportamiento, mypy verifica consistencia de tipos) y conviene poder correrlas por separado.
 - No hay CI corriendo esto en cada push — mismo estado que pytest (ver [specs/pruebas-unitarias.md](pruebas-unitarias.md)).
 - Quedó sin tipar deliberadamente: las migraciones (excluidas por config) y los archivos de `tests/` de `app/organizations` — no se tocaron en esta tanda, aunque mypy no se queja de ellos tampoco al no estar en el path por default (`app config`, no `app/organizations/tests`).

@@ -96,7 +96,7 @@ Crea un usuario nuevo con `role='user'` y devuelve tokens (login automático pos
   - `username`: string, `max_length=150`.
   - `email`: formato email válido.
   - `password`: string, `min_length=8`, `write_only`.
-- Además de la validación del serializer, pasa por los `AUTH_PASSWORD_VALIDATORS` de Django al hacer `create_user` (similitud con atributos del usuario, longitud mínima, password común, password solo numérica — config/settings.py:128-141).
+- La única regla sobre la password es la del serializer (`min_length=8`). **No** pasa por los `AUTH_PASSWORD_VALIDATORS` de Django: `create_user` no los ejecuta (solo los usan los formularios de Django y `validate_password`), así que passwords como `12345678` se aceptan. Decisión explícita: se deja así.
 
 **Response 201**
 ```json
@@ -212,11 +212,7 @@ Cliente                          API
 - **Autenticación por defecto en DRF**: `JWTAuthentication` (`REST_FRAMEWORK.DEFAULT_AUTHENTICATION_CLASSES`, config/settings.py:95-98).
 - **Permiso por defecto en DRF**: `IsAuthenticated` (config/settings.py:99-101) — todo endpoint nuevo requiere auth salvo que se marque explícitamente `AllowAny` (como `login` y `register`).
 - **Passwords**: nunca se devuelven en las respuestas (`write_only` en el serializer); se almacenan hasheadas vía `create_user` de Django.
-- **Validadores de password** (solo aplican en registro, vía `AUTH_PASSWORD_VALIDATORS`):
-  - `UserAttributeSimilarityValidator`
-  - `MinimumLengthValidator`
-  - `CommonPasswordValidator`
-  - `NumericPasswordValidator`
+- **Validadores de password**: `AUTH_PASSWORD_VALIDATORS` está configurado en settings (similitud con atributos del usuario, longitud mínima, password común, solo numérica), pero **la API no los aplica** — el registro solo exige 8 caracteres mínimo (ver §3.2). Rigen únicamente para lo que pase por las herramientas de Django que llaman a `validate_password` (por ejemplo `createsuperuser`).
 - **CSRF**: `CsrfViewMiddleware` está activo globalmente, pero los endpoints de auth son vistas DRF (`@api_view`) que no dependen de sesión/cookies, por lo que no aplica CSRF a estas llamadas.
 
 ## 6. Manejo de errores

@@ -2,6 +2,12 @@ import pytest
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 
+@pytest.fixture(autouse=True)
+def fast_password_hasher(settings):
+    """Hasher MD5 solo en tests: el PBKDF2 por defecto es lento a propósito y cada test crea varios usuarios."""
+    settings.PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']
+
+
 @pytest.fixture
 def rf():
     """APIRequestFactory — building block para armar requests autenticados contra las vistas."""

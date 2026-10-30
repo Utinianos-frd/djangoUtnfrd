@@ -18,8 +18,10 @@ from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
+from .health import health
 
 urlpatterns = [
+    path('health/', health, name='health'),
     path('admin/', admin.site.urls),
     path('api/v1/auth/', include('app.users.urls')),
     path('api/v1/organizations/', include('app.organizations.urls')),
