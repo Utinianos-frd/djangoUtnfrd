@@ -19,10 +19,12 @@ from django.contrib import admin
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 from .health import health
+from app.organizations.views.dashboard_view import dashboard
 
 urlpatterns = [
     path('health/', health, name='health'),
     path('admin/', admin.site.urls),
+    path('api/v1/dashboard', dashboard, name='dashboard'),
     path('api/v1/auth/', include('app.users.urls')),
     path('api/v1/organizations/', include('app.organizations.urls')),
     path(

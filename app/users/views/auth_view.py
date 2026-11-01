@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from ..models.users import Users
 from drf_spectacular.utils import extend_schema, OpenApiExample, OpenApiResponse
 from drf_spectacular.types import OpenApiTypes
-from ..services.auth_service import login_usuario, register_usuario, get_perfil_usuario
+from ..services.auth_service import login_usuario, register_usuario, get_perfil_usuario, update_perfil_usuario
 
 
 _JSONAPI_ERROR_EXAMPLE = OpenApiExample(
@@ -172,9 +172,12 @@ def register(request: Request) -> Response:
         401: OpenApiResponse(description='No autenticado'),
     },
 )
-@api_view(['GET'])
+@api_view(['GET', 'PATCH'])
 @permission_classes([IsAuthenticated])
 def me(request: Request) -> Response:
-    """GET /auth/me — wrapper fino sobre auth_service.get_perfil_usuario."""
+    """GET /auth/me — perfil del usuario. PATCH /auth/me — edita el perfil."""
+    if request.method == 'PATCH':
+        data, status = update_perfil_usuario(request)
+        return Response(data, status=status)
     data = get_perfil_usuario(cast(Users, request.user))
     return Response(data, status=200)

@@ -4,6 +4,7 @@ from rest_framework.request import Request
 from rest_framework_simplejwt.tokens import RefreshToken
 from ..models.users import Users
 from ..serializers.register_serializer import RegisterSerializer
+from ..serializers.update_profile_serializer import UpdateProfileSerializer
 from datetime import datetime, timezone
 
 
@@ -101,9 +102,37 @@ def get_perfil_usuario(user: Users) -> dict[str, Any]:
                 "username": user.username,
                 "email": user.email,
                 "role": user.role,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "age": user.age,
+                "phone": user.phone,
+                "bio": user.bio,
+                "avatar_url": user.avatar_url,
             },
             "links": {
                 "self": f"/api/v1/auth/me",
             },
         }
     }
+
+
+def update_perfil_usuario(request: Request) -> tuple[dict[str, Any], int]:
+    """Edita el perfil del usuario autenticado (PATCH /auth/me)."""
+    attributes = _extract_attributes(request)
+    if attributes is None:
+        return _error(400, "El body debe seguir la estructura JSON:API: { data: { type, attributes } }")
+
+    serializer = UpdateProfileSerializer(data=attributes, partial=True)
+    if not serializer.is_valid():
+        errors = [
+            {"status": "400", "source": {"pointer": f"/data/attributes/{field}"}, "detail": str(msgs[0])}
+            for field, msgs in serializer.errors.items()
+        ]
+        return {"errors": errors}, 400
+
+    user = request.user
+    for field, value in serializer.validated_data.items():
+        setattr(user, field, value)
+    user.save()
+
+    return get_perfil_usuario(user), 200
