@@ -1,5 +1,6 @@
 from typing import Any, cast
 
+from django.utils import timezone
 from rest_framework.request import Request
 from app.users.models import Users
 from app.organizations.models import Organization, Group, Membership, GroupMembership
@@ -61,6 +62,8 @@ def _task_resource(task: Task) -> dict[str, Any]:
         "id": str(task.id),
         "attributes": {
             "title": task.title,
+            "description": task.description,
+            "closed_at": task.closed_at.isoformat() if task.closed_at else None,
             "status": task.status,
             "project_id": task.project_id,
             "assignee_ids": list(task.assignees.values_list('id', flat=True)),
@@ -100,6 +103,15 @@ def _dependency_block_reason(task: Task, new_status: str) -> str | None:
     return None
 
 
+def _set_status(task: Task, new_status: str) -> None:
+    """Cambia el status y mantiene closed_at: se fecha al pasar a DONE y se limpia si la tarea se reabre."""
+    if new_status == Task.Status.DONE and task.status != Task.Status.DONE:
+        task.closed_at = timezone.now()
+    elif new_status != Task.Status.DONE:
+        task.closed_at = None
+    task.status = new_status
+
+
 def _validate_assignee_ids(group: Group, assignee_ids: list[int]) -> tuple[dict[str, Any], int] | None:
     """Devuelve un error 400 si algún id no es miembro del grupo, o None si todos son válidos."""
     valid_ids = set(
@@ -134,7 +146,11 @@ def crear_tarea(request: Request, organization_id: int, group_id: int, project_i
     if invalid:
         return invalid
 
-    task = Task.objects.create(project=project, title=serializer.validated_data['title'])
+    task = Task.objects.create(
+        project=project,
+        title=serializer.validated_data['title'],
+        description=serializer.validated_data['description'],
+    )
     if assignee_ids:
         task.assignees.set(assignee_ids)
 
@@ -219,10 +235,11 @@ def actualizar_tarea(
             if block_reason:
                 return error(409, block_reason)
 
-        if 'title' in lead_serializer.validated_data:
-            task.title = lead_serializer.validated_data['title']
+        for field in ('title', 'description'):
+            if field in lead_serializer.validated_data:
+                setattr(task, field, lead_serializer.validated_data[field])
         if 'status' in lead_serializer.validated_data:
-            task.status = lead_serializer.validated_data['status']
+            _set_status(task, lead_serializer.validated_data['status'])
         task.save()
         warnings: list[dict[str, Any]] = []
         if 'assignee_ids' in lead_serializer.validated_data:
@@ -247,7 +264,7 @@ def actualizar_tarea(
     if block_reason:
         return error(409, block_reason)
 
-    task.status = status_serializer.validated_data['status']
+    _set_status(task, status_serializer.validated_data['status'])
     task.save()
     return {"data": _task_resource(task)}, 200
 

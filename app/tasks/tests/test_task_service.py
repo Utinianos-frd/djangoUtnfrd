@@ -1,4 +1,7 @@
+from datetime import timedelta
+
 import pytest
+from django.utils import timezone
 
 from app.tasks.models import Task, TaskDependency
 from app.tasks.views.task_view import tasks, task_detail
@@ -31,6 +34,21 @@ class TestCrearTarea:
 
         assert status == 201
         assert data['data']['attributes']['assignee_ids'] == []
+
+    def test_crea_con_descripcion(self, call, org_group, project_kwargs):
+        status, data = call(
+            tasks, 'post', '/', org_group.lead, _task_payload(title='Login', description='Con JWT'), **project_kwargs,
+        )
+
+        assert status == 201
+        assert data['data']['attributes']['description'] == 'Con JWT'
+
+    def test_nace_sin_descripcion_ni_fecha_de_cierre(self, call, org_group, project_kwargs):
+        status, data = call(tasks, 'post', '/', org_group.lead, _task_payload(title='Login'), **project_kwargs)
+
+        assert status == 201
+        assert data['data']['attributes']['description'] == ''
+        assert data['data']['attributes']['closed_at'] is None
 
     @pytest.mark.parametrize('role', ['owner', 'admin', 'contributor'])
     def test_solo_el_group_lead_puede_crear(self, call, org_group, project_kwargs, role):
@@ -139,6 +157,83 @@ class TestActualizarTarea:
         assert attributes['title'] == 'Nuevo'
         assert attributes['status'] == 'in_progress'
         assert attributes['assignee_ids'] == [org_group.contributor2.id]
+
+    def test_group_lead_edita_la_descripcion(self, call, org_group, project_kwargs, make_task):
+        task = make_task()
+
+        status, data = call(
+            task_detail, 'patch', '/', org_group.lead, _task_payload(description='Detalle'),
+            task_id=task.id, **project_kwargs,
+        )
+
+        assert status == 200
+        assert data['data']['attributes']['description'] == 'Detalle'
+
+    def test_completar_registra_la_fecha_de_cierre(self, call, org_group, project_kwargs, make_task):
+        task = make_task()
+        before = timezone.now()
+
+        status, data = call(
+            task_detail, 'patch', '/', org_group.lead, _task_payload(status='done'),
+            task_id=task.id, **project_kwargs,
+        )
+
+        assert status == 200
+        task.refresh_from_db()
+        assert task.closed_at is not None and task.closed_at >= before
+        assert data['data']['attributes']['closed_at'] == task.closed_at.isoformat()
+
+    def test_contributor_que_completa_tambien_registra_el_cierre(
+        self, call, org_group, project_kwargs, make_task,
+    ):
+        task = make_task(assignees=[org_group.contributor])
+
+        status, _data = call(
+            task_detail, 'patch', '/', org_group.contributor, _task_payload(status='done'),
+            task_id=task.id, **project_kwargs,
+        )
+
+        assert status == 200
+        task.refresh_from_db()
+        assert task.closed_at is not None
+
+    def test_reabrir_una_tarea_limpia_la_fecha_de_cierre(self, call, org_group, project_kwargs, make_task):
+        task = make_task(status=Task.Status.DONE)
+        task.closed_at = timezone.now()
+        task.save()
+
+        status, data = call(
+            task_detail, 'patch', '/', org_group.lead, _task_payload(status='in_progress'),
+            task_id=task.id, **project_kwargs,
+        )
+
+        assert status == 200
+        assert data['data']['attributes']['closed_at'] is None
+
+    def test_volver_a_mandar_done_no_pisa_la_fecha_de_cierre(self, call, org_group, project_kwargs, make_task):
+        task = make_task(status=Task.Status.DONE)
+        closed_at = timezone.now() - timedelta(days=2)
+        task.closed_at = closed_at
+        task.save()
+
+        call(
+            task_detail, 'patch', '/', org_group.lead, _task_payload(status='done', title='Renombrada'),
+            task_id=task.id, **project_kwargs,
+        )
+
+        task.refresh_from_db()
+        assert task.closed_at == closed_at
+
+    def test_la_fecha_de_cierre_no_es_editable(self, call, org_group, project_kwargs, make_task):
+        task = make_task()
+
+        call(
+            task_detail, 'patch', '/', org_group.lead, _task_payload(closed_at='2020-01-01T00:00:00Z'),
+            task_id=task.id, **project_kwargs,
+        )
+
+        task.refresh_from_db()
+        assert task.closed_at is None
 
     def test_group_lead_no_puede_asignar_a_alguien_fuera_del_grupo(
         self, call, org_group, project_kwargs, make_task,

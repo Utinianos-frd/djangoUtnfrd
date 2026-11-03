@@ -16,6 +16,8 @@ class Task(models.Model):
         related_name='tasks',
     )
     title = models.CharField(max_length=255)
+    description = models.TextField(blank=True, default='')
+    closed_at = models.DateTimeField(null=True, blank=True)  # lo setea el servicio al pasar a DONE; no es editable
     status = models.CharField(max_length=15, choices=Status.choices, default=Status.PENDING)
     assignees = models.ManyToManyField(  # una tarea puede tener varios responsables a la vez (RF-26)
         settings.AUTH_USER_MODEL,

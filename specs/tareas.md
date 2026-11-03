@@ -46,14 +46,14 @@ Spec técnico de la entidad `Task`, último nivel de la jerarquía Organización
 ### 3.1. `POST /tasks` — crear tarea
 
 ```json
-{ "data": { "type": "tasks", "attributes": { "title": "Implementar login", "assignee_ids": [5, 8] } } }
+{ "data": { "type": "tasks", "attributes": { "title": "Implementar login", "description": "Login con JWT", "assignee_ids": [5, 8] } } }
 ```
 
-`assignee_ids` es opcional (default `[]` — una tarea puede crearse sin asignar a nadie todavía). Cada id debe corresponder a un usuario con una `GroupMembership` en el grupo dueño del proyecto (cualquier rol, group lead o contributor) — si alguno no lo es, `400` con el detalle de qué ids fallaron.
+`description` (texto libre) es opcional, default `""`. `assignee_ids` es opcional (default `[]` — una tarea puede crearse sin asignar a nadie todavía). Cada id debe corresponder a un usuario con una `GroupMembership` en el grupo dueño del proyecto (cualquier rol, group lead o contributor) — si alguno no lo es, `400` con el detalle de qué ids fallaron.
 
 **Response 201**
 ```json
-{ "data": { "type": "tasks", "id": "1", "attributes": { "title": "Implementar login", "status": "pending", "project_id": 3, "assignee_ids": [5, 8], "blocked": false } } }
+{ "data": { "type": "tasks", "id": "1", "attributes": { "title": "Implementar login", "description": "Login con JWT", "closed_at": null, "status": "pending", "project_id": 3, "assignee_ids": [5, 8], "blocked": false } } }
 ```
 
 Si alguno de los asignados queda sobrecargado con esta asignación, la response trae además un bloque `meta.warnings` (no bloquea la creación) — ver [workload.md §4](workload.md).
@@ -73,8 +73,10 @@ Mismo criterio de visibilidad que el listado, pero a nivel de una tarea puntual:
 
 Dos caminos según el rol de quien hace el request (RF-27 vs. RF-29):
 
-- **Group lead**: puede cambiar `title`, `status` y/o `assignee_ids` (valida los nuevos `assignee_ids` igual que en el create). Es un `PATCH` parcial — solo toca los campos presentes en el body. Si el body trae `assignee_ids`, la response puede incluir `meta.warnings` igual que en el create (ver [workload.md §4](workload.md)).
-- **Contributor asignado a la tarea**: **solo** puede enviar `status`. Si el body trae cualquier otro campo (`title`, `assignee_ids`), `400` — no se ignora silenciosamente, se rechaza explícitamente para que quede claro que no tiene permiso sobre esos campos. Si no está asignado a la tarea, `403` (ni siquiera puede cambiar el status de una tarea ajena).
+- **Group lead**: puede cambiar `title`, `description`, `status` y/o `assignee_ids` (valida los nuevos `assignee_ids` igual que en el create). Es un `PATCH` parcial — solo toca los campos presentes en el body. Si el body trae `assignee_ids`, la response puede incluir `meta.warnings` igual que en el create (ver [workload.md §4](workload.md)).
+- **Contributor asignado a la tarea**: **solo** puede enviar `status`. Si el body trae cualquier otro campo (`title`, `description`, `assignee_ids`), `400` — no se ignora silenciosamente, se rechaza explícitamente para que quede claro que no tiene permiso sobre esos campos. Si no está asignado a la tarea, `403` (ni siquiera puede cambiar el status de una tarea ajena).
+
+**Fecha de cierre (`closed_at`)**: la maneja el backend, no se puede enviar. Cuando una tarea pasa a `done` (la mueva el group lead o el contributor) se guarda el momento; si vuelve a `pending`/`in_progress` queda en `null`. Reenviar `done` a una tarea ya completada no cambia la fecha.
 
 **Errores**: `404` (tarea/proyecto/grupo/organización inexistente), `403` (contributor no asignado, o usuario sin rol en el grupo), `400` (validación de serializer, `assignee_ids` inválidos, o contributor mandando campos no permitidos).
 
