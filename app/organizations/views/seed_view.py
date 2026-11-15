@@ -10,8 +10,9 @@ from ..services.seed_service import run_seed
     tags=['Dev'],
     summary='Poblar datos de prueba (solo DEBUG)',
     description=(
-        'Crea (o reutiliza, si ya existen) una organización de demo con un usuario por cada rol del '
-        'sistema: owner, admin, member, group lead y contributor. Devuelve las credenciales generadas. '
+        'Crea (o reutiliza, si ya existen) una organización de demo (plan Pro) con un usuario por cada rol del '
+        'sistema, dos grupos, proyectos, tareas en distintos estados, dependencias, comentarios y sesiones '
+        'de Modo Foco. Devuelve un resumen y las credenciales generadas. '
         'Esta ruta solo existe cuando `DEBUG=True`; en cualquier otro ambiente no está registrada.'
     ),
     responses={
@@ -21,10 +22,15 @@ from ..services.seed_service import run_seed
                 'Éxito',
                 value={
                     'organization': 'Tasker Demo',
-                    'group': 'Backend',
+                    'groups': ['Backend', 'Frontend'],
+                    'summary': {
+                        'users': 8, 'projects': 4, 'tasks': 17,
+                        'dependencies': 8, 'comments': 9, 'focus_sessions': 2,
+                    },
                     'credentials': [
-                        {'username': 'owner', 'password': 'owner123', 'org_role': 'owner', 'group_role': None},
-                        {'username': 'grouplead', 'password': 'grouplead123', 'org_role': 'member', 'group_role': 'group_lead'},
+                        {'username': 'owner', 'password': 'owner123', 'org_role': 'owner', 'group_roles': {}},
+                        {'username': 'grouplead', 'password': 'grouplead123', 'org_role': 'member',
+                         'group_roles': {'Backend': 'group_lead'}},
                     ],
                 },
                 response_only=True,

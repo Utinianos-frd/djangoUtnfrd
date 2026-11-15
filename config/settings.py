@@ -14,20 +14,38 @@ import logging
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+from dotenv import load_dotenv
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Carga .env si existe (dev local / pytest). No pisa variables ya definidas en el entorno,
+# así que en el contenedor siguen mandando las que inyecta docker-compose vía env_file.
+load_dotenv(BASE_DIR / '.env')
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-*h2i#d8zvkvup56dsji8hm98wz)*quqi9b4wqe=hj@1*l(=f03'
+# Obligatoria y fuera del repo: además de Django, firma los JWT (SIMPLE_JWT['SIGNING_KEY']),
+# así que quien la conozca puede fabricar tokens válidos para cualquier usuario.
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', '')
+if not SECRET_KEY:
+    raise ImproperlyConfigured(
+        'Falta DJANGO_SECRET_KEY en el entorno. Generá una con: '
+        'python -c "from django.core.management.utils import get_random_secret_key as k; print(k())"'
+    )
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# False por defecto: solo se activa poniendo DJANGO_DEBUG=True explícitamente (dev local).
+# Ojo: además de las trazas de error, DEBUG habilita el endpoint de seed (config/urls.py).
+DEBUG = os.environ.get('DJANGO_DEBUG', 'False').strip().lower() in ('1', 'true', 'yes')
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+    if host.strip()
+]
 
 
 # Application definition
@@ -41,7 +59,6 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'drf_spectacular',
-    'corsheaders',
     'app.users',
     'app.organizations',
     'app.tasks',
@@ -50,7 +67,6 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -106,12 +122,6 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
-
-CORS_ALLOWED_ORIGINS = [
-    origin.strip()
-    for origin in os.environ.get('CORS_ALLOWED_ORIGINS', 'http://localhost:4200').split(',')
-    if origin.strip()
-]
 
 SPECTACULAR_SETTINGS = {
     'TITLE': 'API',

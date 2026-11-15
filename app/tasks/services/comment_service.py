@@ -22,7 +22,6 @@ def _comment_resource(comment: Comment) -> dict[str, Any]:
         },
     }
 
-
 def _get_task(
     organization_id: int, group_id: int, project_id: int, task_id: int,
 ) -> tuple[Organization | None, Group | None, Task | None]:
