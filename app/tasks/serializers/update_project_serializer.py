@@ -5,3 +5,4 @@ class UpdateProjectSerializer(serializers.Serializer):
     """Valida el body de PATCH .../projects/{id} (solo owner)."""
 
     name = serializers.CharField(max_length=255, required=False)
+    description = serializers.CharField(required=False, allow_blank=True)

@@ -5,3 +5,4 @@ class CreateProjectSerializer(serializers.Serializer):
     """Valida el body de POST .../projects (el group sale de la URL, no del body)."""
 
     name = serializers.CharField(max_length=255)
+    description = serializers.CharField(required=False, allow_blank=True, default='')

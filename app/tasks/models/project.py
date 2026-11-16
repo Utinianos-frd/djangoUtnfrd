@@ -10,6 +10,7 @@ class Project(models.Model):
         related_name='projects',
     )
     name = models.CharField(max_length=255)
+    description = models.TextField(blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
