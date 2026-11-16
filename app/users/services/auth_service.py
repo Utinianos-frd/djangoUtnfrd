@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 from django.contrib.auth import authenticate
 from rest_framework.request import Request
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -130,7 +130,7 @@ def update_perfil_usuario(request: Request) -> tuple[dict[str, Any], int]:
         ]
         return {"errors": errors}, 400
 
-    user = request.user
+    user = cast(Users, request.user)
     for field, value in serializer.validated_data.items():
         setattr(user, field, value)
     user.save()
