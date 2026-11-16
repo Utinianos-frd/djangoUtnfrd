@@ -6,7 +6,7 @@ from app.users.models import Users
 from ..models import FocusSession, Pomodoro
 from ..serializers.start_pomodoro_serializer import StartPomodoroSerializer
 from ..serializers.pomodoro_action_serializer import PomodoroActionSerializer
-from .common import error, extract_attributes, serializer_errors
+from app.common.jsonapi import error, parse_body
 from .focus_session_service import get_own_session
 
 
@@ -48,15 +48,11 @@ def iniciar_pomodoro(request: Request, session_id: int) -> tuple[dict[str, Any],
     ).exists():
         return error(409, "Ya hay un pomodoro en curso en esta sesión")
 
-    attributes = extract_attributes(request)
-    if attributes is None:
-        return error(400, "El body debe seguir la estructura JSON:API: { data: { type, attributes } }")
+    body, err = parse_body(request, StartPomodoroSerializer)
+    if err:
+        return err
 
-    serializer = StartPomodoroSerializer(data=attributes)
-    if not serializer.is_valid():
-        return {"errors": serializer_errors(serializer)}, 400
-
-    task_id = serializer.validated_data['task_id']
+    task_id = body['task_id']
     if not session.tasks.filter(id=task_id).exists():
         return error(400, "Esa tarea no forma parte del objetivo de esta sesión")
 
@@ -74,15 +70,11 @@ def actualizar_pomodoro(request: Request, session_id: int, pomodoro_id: int) -> 
     if not pomodoro:
         return error(404, "Pomodoro no encontrado")
 
-    attributes = extract_attributes(request)
-    if attributes is None:
-        return error(400, "El body debe seguir la estructura JSON:API: { data: { type, attributes } }")
+    body, err = parse_body(request, PomodoroActionSerializer)
+    if err:
+        return err
 
-    serializer = PomodoroActionSerializer(data=attributes)
-    if not serializer.is_valid():
-        return {"errors": serializer_errors(serializer)}, 400
-
-    action = serializer.validated_data['action']
+    action = body['action']
     now = timezone.now()
 
     if action == 'pause':

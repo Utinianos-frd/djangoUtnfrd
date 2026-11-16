@@ -2,11 +2,11 @@ from typing import Any, cast
 
 from rest_framework.request import Request
 from app.users.models import Users
-from app.organizations.models import GroupMembership
 from ..models import Task, TaskDependency
 from ..serializers.create_dependency_serializer import CreateDependencySerializer
-from .common import error, extract_attributes, serializer_errors
-from .task_service import _get_org_group_project, _is_group_lead, _is_org_overseer, _group_role
+from app.common.jsonapi import error, parse_body
+from app.organizations.access import Access
+from .task_service import _get_org_group_project
 
 
 def _dependency_resource(dependency: TaskDependency) -> dict[str, Any]:
@@ -48,20 +48,16 @@ def crear_dependencia(
     if not project:
         return error(404, "Proyecto no encontrado")
 
-    if not _is_group_lead(cast(Users, request.user), group):
+    if not Access(cast(Users, request.user), organization, group).is_group_lead:
         return error(403, "Solo el group lead puede agregar dependencias")
 
-    attributes = extract_attributes(request)
-    if attributes is None:
-        return error(400, "El body debe seguir la estructura JSON:API: { data: { type, attributes } }")
+    body, err = parse_body(request, CreateDependencySerializer)
+    if err:
+        return err
 
-    serializer = CreateDependencySerializer(data=attributes)
-    if not serializer.is_valid():
-        return {"errors": serializer_errors(serializer)}, 400
-
-    blocking_id = serializer.validated_data['blocking_task_id']
-    blocked_id = serializer.validated_data['blocked_task_id']
-    dependency_type = serializer.validated_data['dependency_type']
+    blocking_id = body['blocking_task_id']
+    blocked_id = body['blocked_task_id']
+    dependency_type = body['dependency_type']
 
     if blocking_id == blocked_id:
         return error(400, "Una tarea no puede depender de sí misma")
@@ -99,13 +95,13 @@ def listar_dependencias(
     )
 
     dependencies: list[TaskDependency]
-    if _is_org_overseer(user, organization) or _is_group_lead(user, group):
+    access = Access(user, organization, group)
+    if access.sees_all_tasks:
         dependencies = list(all_dependencies)
-    elif _group_role(user, group) == GroupMembership.Role.CONTRIBUTOR:
+    elif access.is_contributor:
         dependencies = [
             d for d in all_dependencies
-            if d.blocking_task.assignees.filter(id=user.id).exists()
-            or d.blocked_task.assignees.filter(id=user.id).exists()
+            if access.is_assigned(d.blocking_task) or access.is_assigned(d.blocked_task)
         ]
     else:
         return error(403, "No tenés acceso a este proyecto")
@@ -121,7 +117,7 @@ def eliminar_dependencia(
     if not project:
         return error(404, "Proyecto no encontrado")
 
-    if not _is_group_lead(cast(Users, request.user), group):
+    if not Access(cast(Users, request.user), organization, group).is_group_lead:
         return error(403, "Solo el group lead puede eliminar dependencias")
 
     dependency = TaskDependency.objects.filter(id=dependency_id, blocking_task__project=project).first()

@@ -2,10 +2,11 @@ from typing import Any, cast
 
 from rest_framework.request import Request
 from app.users.models import Users
-from ..models import Organization, Group, GroupMembership, Membership
+from ..models import Organization, Group
 from ..serializers.create_group_serializer import CreateGroupSerializer
 from ..serializers.update_group_serializer import UpdateGroupSerializer
-from .common import error, extract_attributes, serializer_errors, get_role
+from app.common.jsonapi import error, parse_body
+from ..access import Access
 
 
 def _group_resource(group: Group) -> dict[str, Any]:
@@ -20,32 +21,20 @@ def _group_resource(group: Group) -> dict[str, Any]:
     }
 
 
-def _can_view_group(user: Users, organization: Organization, group: Group) -> bool:
-    """Owner/admin ven cualquier grupo (oversight); un member solo si tiene GroupMembership ahí."""
-    role = get_role(user, organization)
-    if role in (Membership.Role.OWNER, Membership.Role.ADMIN):
-        return True
-    return GroupMembership.objects.filter(group=group, user=user).exists()
-
-
 def crear_grupo(request: Request, organization_id: int) -> tuple[dict[str, Any], int]:
     """Crea un Group dentro de la organización; solo owner (RF-14 bis)."""
     organization = Organization.objects.filter(id=organization_id).first()
     if not organization:
         return error(404, "Organización no encontrada")
 
-    if get_role(cast(Users, request.user), organization) != Membership.Role.OWNER:
+    if not Access(cast(Users, request.user), organization).is_owner:
         return error(403, "Solo el owner puede crear grupos")
 
-    attributes = extract_attributes(request)
-    if attributes is None:
-        return error(400, "El body debe seguir la estructura JSON:API: { data: { type, attributes } }")
+    body, err = parse_body(request, CreateGroupSerializer)
+    if err:
+        return err
 
-    serializer = CreateGroupSerializer(data=attributes)
-    if not serializer.is_valid():
-        return {"errors": serializer_errors(serializer)}, 400
-
-    group = Group.objects.create(organization=organization, name=serializer.validated_data['name'])
+    group = Group.objects.create(organization=organization, name=body['name'])
     return {"data": _group_resource(group)}, 201
 
 
@@ -56,11 +45,11 @@ def listar_grupos(request: Request, organization_id: int) -> tuple[dict[str, Any
     if not organization:
         return error(404, "Organización no encontrada")
 
-    role = get_role(user, organization)
-    if role is None:
+    access = Access(user, organization)
+    if not access.is_member:
         return error(403, "No pertenecés a esta organización")
 
-    if role in (Membership.Role.OWNER, Membership.Role.ADMIN):
+    if access.is_overseer:
         groups = Group.objects.filter(organization=organization)
     else:
         groups = Group.objects.filter(organization=organization, memberships__user=user)
@@ -78,7 +67,7 @@ def obtener_grupo(request: Request, organization_id: int, group_id: int) -> tupl
     if not group:
         return error(404, "Grupo no encontrado")
 
-    if not _can_view_group(cast(Users, request.user), organization, group):
+    if not Access(cast(Users, request.user), organization, group).can_view_group:
         return error(403, "No tenés acceso a este grupo")
 
     return {"data": _group_resource(group)}, 200
@@ -94,19 +83,15 @@ def actualizar_grupo(request: Request, organization_id: int, group_id: int) -> t
     if not group:
         return error(404, "Grupo no encontrado")
 
-    if get_role(cast(Users, request.user), organization) != Membership.Role.OWNER:
+    if not Access(cast(Users, request.user), organization).is_owner:
         return error(403, "Solo el owner puede modificar el grupo")
 
-    attributes = extract_attributes(request)
-    if attributes is None:
-        return error(400, "El body debe seguir la estructura JSON:API: { data: { type, attributes } }")
+    body, err = parse_body(request, UpdateGroupSerializer, partial=True)
+    if err:
+        return err
 
-    serializer = UpdateGroupSerializer(data=attributes, partial=True)
-    if not serializer.is_valid():
-        return {"errors": serializer_errors(serializer)}, 400
-
-    if 'name' in serializer.validated_data:
-        group.name = serializer.validated_data['name']
+    if 'name' in body:
+        group.name = body['name']
         group.save()
 
     return {"data": _group_resource(group)}, 200
@@ -122,7 +107,7 @@ def eliminar_grupo(request: Request, organization_id: int, group_id: int) -> tup
     if not group:
         return error(404, "Grupo no encontrado")
 
-    if get_role(cast(Users, request.user), organization) != Membership.Role.OWNER:
+    if not Access(cast(Users, request.user), organization).is_owner:
         return error(403, "Solo el owner puede eliminar el grupo")
 
     group.delete()

@@ -1,10 +1,14 @@
 from typing import Any, cast
 
+from django.db import transaction
 from rest_framework.request import Request
+from app.tasks.models import Task
 from app.users.models import Users
-from ..models import Organization, Membership
+from ..models import Organization, Membership, GroupMembership
 from ..serializers.update_member_role_serializer import UpdateMemberRoleSerializer
-from .common import error, extract_attributes, serializer_errors, get_role
+from app.common.jsonapi import error, parse_body
+from ..access import Access
+from .group_membership_service import quitar_asignaciones
 
 
 def _member_resource(membership: Membership) -> dict[str, Any]:
@@ -26,7 +30,7 @@ def listar_miembros(request: Request, organization_id: int) -> tuple[dict[str, A
     if not organization:
         return error(404, "Organización no encontrada")
 
-    if get_role(cast(Users, request.user), organization) is None:
+    if not Access(cast(Users, request.user), organization).is_member:
         return error(403, "No pertenecés a esta organización")
 
     memberships = Membership.objects.filter(organization=organization).select_related('user')
@@ -39,22 +43,18 @@ def cambiar_rol_miembro(request: Request, organization_id: int, user_id: int) ->
     if not organization:
         return error(404, "Organización no encontrada")
 
-    if get_role(cast(Users, request.user), organization) != Membership.Role.OWNER:
+    if not Access(cast(Users, request.user), organization).is_owner:
         return error(403, "Solo el owner puede cambiar roles")
 
     target = Membership.objects.filter(organization=organization, user_id=user_id).first()
     if not target:
         return error(404, "El usuario no pertenece a esta organización")
 
-    attributes = extract_attributes(request)
-    if attributes is None:
-        return error(400, "El body debe seguir la estructura JSON:API: { data: { type, attributes } }")
+    body, err = parse_body(request, UpdateMemberRoleSerializer)
+    if err:
+        return err
 
-    serializer = UpdateMemberRoleSerializer(data=attributes)
-    if not serializer.is_valid():
-        return {"errors": serializer_errors(serializer)}, 400
-
-    new_role = serializer.validated_data['role']
+    new_role = body['role']
 
     if target.role == Membership.Role.OWNER and new_role != Membership.Role.OWNER:
         return error(400, "No se puede quitar el rol de owner directamente: traspasalo asignando owner a otro miembro")
@@ -79,7 +79,7 @@ def eliminar_miembro(request: Request, organization_id: int, user_id: int) -> tu
     if not organization:
         return error(404, "Organización no encontrada")
 
-    if get_role(cast(Users, request.user), organization) not in (Membership.Role.OWNER, Membership.Role.ADMIN):
+    if not Access(cast(Users, request.user), organization).is_overseer:
         return error(403, "No tenés permiso para eliminar miembros")
 
     target = Membership.objects.filter(organization=organization, user_id=user_id).first()
@@ -89,5 +89,13 @@ def eliminar_miembro(request: Request, organization_id: int, user_id: int) -> tu
     if target.role == Membership.Role.OWNER:
         return error(400, "No se puede eliminar al owner: traspasá el rol primero")
 
-    target.delete()
+    group_memberships = GroupMembership.objects.filter(group__organization=organization, user_id=user_id)
+    if group_memberships.filter(role=GroupMembership.Role.GROUP_LEAD).exists():
+        return error(400, "No se puede eliminar a un group lead: reasigná el liderazgo de su grupo primero")
+
+    # Sin esto, quien sale de la organización seguía siendo miembro (o lead) de sus grupos y asignado a sus tareas.
+    with transaction.atomic():
+        quitar_asignaciones(user_id, Task.objects.filter(project__group__organization=organization))
+        group_memberships.delete()
+        target.delete()
     return None, 204

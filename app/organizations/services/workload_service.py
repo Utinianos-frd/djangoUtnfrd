@@ -4,29 +4,11 @@ from django.db.models import QuerySet
 from rest_framework.request import Request
 from app.users.models import Users
 from app.tasks.models import Task
-from ..models import Organization, Group, GroupMembership, Membership
-from .common import error, get_role
+from ..models import Organization, Group, GroupMembership
+from app.common.jsonapi import error
+from ..access import Access, get_org_and_group
 
 ACTIVE_STATUSES = (Task.Status.PENDING, Task.Status.IN_PROGRESS)  # 'done' no cuenta para la carga de nadie
-
-
-def _get_org_and_group(organization_id: int, group_id: int) -> tuple[Organization | None, Group | None]:
-    """Resuelve (organization, group) por id, o (None, None)/(org, None) si no existen."""
-    organization = Organization.objects.filter(id=organization_id).first()
-    if not organization:
-        return None, None
-    group = Group.objects.filter(id=group_id, organization=organization).first()
-    return organization, group
-
-
-def _can_view_workload(user: Users, organization: Organization, group: Group) -> bool:
-    """Owner/admin (oversight) o el group lead de este grupo puntual — RF-39."""
-    role = get_role(user, organization)
-    if role in (Membership.Role.OWNER, Membership.Role.ADMIN):
-        return True
-    return GroupMembership.objects.filter(
-        group=group, user=user, role=GroupMembership.Role.GROUP_LEAD,
-    ).exists()
 
 
 def tareas_activas_qs(user: Users) -> QuerySet[Task]:
@@ -67,11 +49,11 @@ def _member_workload_resource(membership: GroupMembership, threshold: int) -> di
 def obtener_panel_workload(request: Request, organization_id: int, group_id: int) -> tuple[dict[str, Any], int]:
     """Panel de carga de cada miembro del grupo (RF-39/40/41)."""
     user = cast(Users, request.user)
-    organization, group = _get_org_and_group(organization_id, group_id)
+    organization, group = get_org_and_group(organization_id, group_id)
     if not organization or not group:
         return error(404, "Grupo no encontrado")
 
-    if not _can_view_workload(user, organization, group):
+    if not Access(user, organization, group).can_view_workload:
         return error(403, "No tenés permiso para ver el workload de este grupo")
 
     memberships = GroupMembership.objects.filter(group=group).select_related('user')
@@ -84,11 +66,11 @@ def obtener_detalle_miembro(
 ) -> tuple[dict[str, Any], int]:
     """Detalle de tareas activas de un miembro, incluso de otros grupos (RF-45)."""
     user = cast(Users, request.user)
-    organization, group = _get_org_and_group(organization_id, group_id)
+    organization, group = get_org_and_group(organization_id, group_id)
     if not organization or not group:
         return error(404, "Grupo no encontrado")
 
-    if not _can_view_workload(user, organization, group):
+    if not Access(user, organization, group).can_view_workload:
         return error(403, "No tenés permiso para ver el workload de este grupo")
 
     membership = GroupMembership.objects.filter(group=group, user_id=user_id).select_related('user').first()

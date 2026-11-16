@@ -3,46 +3,22 @@ from typing import Any, cast
 from django.utils import timezone
 from rest_framework.request import Request
 from app.users.models import Users
-from app.organizations.models import Organization, Group, Membership, GroupMembership
+from app.organizations.models import Organization, Group, GroupMembership
 from app.organizations.services.workload_service import advertencias_de_asignacion
 from ..models import Project, Task, TaskDependency
 from ..serializers.create_task_serializer import CreateTaskSerializer
 from ..serializers.update_task_serializer import UpdateTaskSerializer
 from ..serializers.update_task_status_serializer import UpdateTaskStatusSerializer
-from .common import error, extract_attributes, serializer_errors
-
-
-def _org_role(user: Users, organization: Organization | None) -> str | None:
-    """Rol del usuario en esta organización, o None si no es miembro."""
-    membership = Membership.objects.filter(organization=organization, user=user).first()
-    return membership.role if membership else None
-
-
-def _group_role(user: Users, group: Group | None) -> str | None:
-    """Rol del usuario en este grupo, o None si no pertenece."""
-    membership = GroupMembership.objects.filter(group=group, user=user).first()
-    return membership.role if membership else None
-
-
-def _is_group_lead(user: Users, group: Group | None) -> bool:
-    """True si el usuario es el group lead de este grupo puntual."""
-    return _group_role(user, group) == GroupMembership.Role.GROUP_LEAD
-
-
-def _is_org_overseer(user: Users, organization: Organization | None) -> bool:
-    """True si el usuario es owner o admin de la organización (visibilidad total, no edición)."""
-    return _org_role(user, organization) in (Membership.Role.OWNER, Membership.Role.ADMIN)
+from app.organizations.access import Access, get_org_and_group
+from app.common.jsonapi import INVALID_BODY, error, extract_attributes, serializer_errors, parse_body
 
 
 def _get_org_group_project(
     organization_id: int, group_id: int, project_id: int,
 ) -> tuple[Organization | None, Group | None, Project | None]:
     """Resuelve (organization, group, project) por id; cualquiera puede venir None si no existe."""
-    organization = Organization.objects.filter(id=organization_id).first()
-    if not organization:
-        return None, None, None
-    group = Group.objects.filter(id=group_id, organization=organization).first()
-    if not group:
+    organization, group = get_org_and_group(organization_id, group_id)
+    if not organization or not group:
         return organization, None, None
     project = Project.objects.filter(id=project_id, group=group).first()
     return organization, group, project
@@ -130,26 +106,22 @@ def crear_tarea(request: Request, organization_id: int, group_id: int, project_i
     if not project or not group or not organization:
         return error(404, "Proyecto no encontrado")
 
-    if not _is_group_lead(user, group):
+    if not Access(user, organization, group).is_group_lead:
         return error(403, "Solo el group lead puede crear tareas")
 
-    attributes = extract_attributes(request)
-    if attributes is None:
-        return error(400, "El body debe seguir la estructura JSON:API: { data: { type, attributes } }")
+    body, err = parse_body(request, CreateTaskSerializer)
+    if err:
+        return err
 
-    serializer = CreateTaskSerializer(data=attributes)
-    if not serializer.is_valid():
-        return {"errors": serializer_errors(serializer)}, 400
-
-    assignee_ids = serializer.validated_data.get('assignee_ids', [])
+    assignee_ids = body.get('assignee_ids', [])
     invalid = _validate_assignee_ids(group, assignee_ids)
     if invalid:
         return invalid
 
     task = Task.objects.create(
         project=project,
-        title=serializer.validated_data['title'],
-        description=serializer.validated_data['description'],
+        title=body['title'],
+        description=body['description'],
     )
     if assignee_ids:
         task.assignees.set(assignee_ids)
@@ -165,21 +137,15 @@ def listar_tareas(request: Request, organization_id: int, group_id: int, project
     if not project:
         return error(404, "Proyecto no encontrado")
 
-    if _is_org_overseer(user, organization) or _is_group_lead(user, group):
+    access = Access(user, organization, group)
+    if access.sees_all_tasks:
         tasks = Task.objects.filter(project=project)
-    elif _group_role(user, group) == GroupMembership.Role.CONTRIBUTOR:
+    elif access.is_contributor:
         tasks = Task.objects.filter(project=project, assignees=user)
     else:
         return error(403, "No tenés acceso a este proyecto")
 
     return {"data": [_task_resource(t) for t in tasks.distinct()]}, 200
-
-
-def _can_view_task(user: Users, organization: Organization | None, group: Group | None, task: Task) -> bool:
-    """Owner/admin/group lead ven cualquiera; un contributor solo si está asignado a esta tarea."""
-    if _is_org_overseer(user, organization) or _is_group_lead(user, group):
-        return True
-    return task.assignees.filter(id=user.id).exists()
 
 
 def obtener_tarea(
@@ -194,7 +160,7 @@ def obtener_tarea(
     if not task:
         return error(404, "Tarea no encontrada")
 
-    if not _can_view_task(cast(Users, request.user), organization, group, task):
+    if not Access(cast(Users, request.user), organization, group).can_view_task(task):
         return error(403, "No tenés acceso a esta tarea")
 
     return {"data": _task_resource(task)}, 200
@@ -215,9 +181,10 @@ def actualizar_tarea(
 
     attributes = extract_attributes(request)
     if attributes is None:
-        return error(400, "El body debe seguir la estructura JSON:API: { data: { type, attributes } }")
+        return error(400, INVALID_BODY)
 
-    if _is_group_lead(user, group):
+    access = Access(user, organization, group)
+    if access.is_group_lead:
         if not group:
             return error(404, "Grupo no encontrado")
 
@@ -250,7 +217,7 @@ def actualizar_tarea(
         return _task_response(task, warnings), 200
 
     # Contributor: solo puede cambiar el status de sus propias tareas (RF-29), nada más.
-    if not task.assignees.filter(id=user.id).exists():
+    if not access.is_active_assignee(task):
         return error(403, "Solo podés modificar tareas que te fueron asignadas")
 
     if set(attributes.keys()) - {'status'}:
@@ -281,7 +248,7 @@ def eliminar_tarea(
     if not task:
         return error(404, "Tarea no encontrada")
 
-    if not _is_group_lead(cast(Users, request.user), group):
+    if not Access(cast(Users, request.user), organization, group).is_group_lead:
         return error(403, "Solo el group lead puede eliminar tareas")
 
     task.delete()

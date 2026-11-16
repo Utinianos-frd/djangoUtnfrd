@@ -7,7 +7,7 @@ from app.organizations.models import Organization
 from app.tasks.models import Task
 from ..models import FocusSession, Pomodoro
 from ..serializers.create_session_serializer import CreateFocusSessionSerializer
-from .common import error, extract_attributes, serializer_errors
+from app.common.jsonapi import error, parse_body
 
 
 def _session_resource(session: FocusSession) -> dict[str, Any]:
@@ -33,18 +33,14 @@ def get_own_session(user: Users, session_id: int) -> FocusSession | None:
 def iniciar_sesion(request: Request) -> tuple[dict[str, Any], int]:
     """Crea la sesión si cada tarea está asignada al usuario y su organización es plan Pro (RF-44/8.4)."""
     user = cast(Users, request.user)
-    attributes = extract_attributes(request)
-    if attributes is None:
-        return error(400, "El body debe seguir la estructura JSON:API: { data: { type, attributes } }")
-
-    serializer = CreateFocusSessionSerializer(data=attributes)
-    if not serializer.is_valid():
-        return {"errors": serializer_errors(serializer)}, 400
+    body, err = parse_body(request, CreateFocusSessionSerializer)
+    if err:
+        return err
 
     if FocusSession.objects.filter(user=user, status=FocusSession.Status.ACTIVE).exists():
         return error(409, "Ya tenés una sesión de modo foco activa")
 
-    task_ids = serializer.validated_data['task_ids']
+    task_ids = body['task_ids']
     tasks = list(
         Task.objects.filter(id__in=task_ids).select_related('project__group__organization')
     )
@@ -61,7 +57,7 @@ def iniciar_sesion(request: Request) -> tuple[dict[str, Any], int]:
                 f"Modo Foco requiere plan Pro. La organización '{organization.name}' está en plan Free.",
             )
 
-    session = FocusSession.objects.create(user=user, goal_text=serializer.validated_data['goal_text'])
+    session = FocusSession.objects.create(user=user, goal_text=body['goal_text'])
     session.tasks.set(tasks)
 
     return {"data": _session_resource(session)}, 201

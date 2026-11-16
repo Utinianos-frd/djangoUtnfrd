@@ -1,11 +1,15 @@
 from typing import Any, cast
 
+from django.db import transaction
+from django.db.models import QuerySet
 from rest_framework.request import Request
+from app.tasks.models import Task
 from app.users.models import Users
-from ..models import Organization, Group, GroupMembership, Membership
+from ..models import Group, GroupMembership, Membership
 from ..serializers.add_group_member_serializer import AddGroupMemberSerializer
 from ..serializers.update_group_member_role_serializer import UpdateGroupMemberRoleSerializer
-from .common import error, extract_attributes, serializer_errors, get_role
+from app.common.jsonapi import error, parse_body
+from ..access import Access, get_org_and_group
 
 
 def _member_resource(membership: GroupMembership) -> dict[str, Any]:
@@ -21,30 +25,20 @@ def _member_resource(membership: GroupMembership) -> dict[str, Any]:
     }
 
 
-def _get_org_and_group(organization_id: int, group_id: int) -> tuple[Organization | None, Group | None]:
-    """Resuelve (organization, group) por id, o (None, None)/(org, None) si no existen."""
-    organization = Organization.objects.filter(id=organization_id).first()
-    if not organization:
-        return None, None
-    group = Group.objects.filter(id=group_id, organization=organization).first()
-    return organization, group
-
-
-def _group_role(user: Users, group: Group) -> str | None:
-    """Rol del usuario en este grupo puntual (group_lead/contributor), o None si no pertenece."""
-    membership = GroupMembership.objects.filter(group=group, user=user).first()
-    return membership.role if membership else None
+def quitar_asignaciones(user_id: int, tasks: QuerySet[Task]) -> None:
+    """Desasigna al usuario de estas tareas. Se usa al sacarlo de un grupo/organización para que no queden
+    asignaciones colgadas (que antes le seguían dando acceso a las tareas y sus comentarios)."""
+    Task.assignees.through.objects.filter(task__in=tasks, users_id=user_id).delete()
 
 
 def listar_miembros_grupo(request: Request, organization_id: int, group_id: int) -> tuple[dict[str, Any], int]:
     """Owner/admin, o cualquier miembro de este grupo puntual."""
     user = cast(Users, request.user)
-    organization, group = _get_org_and_group(organization_id, group_id)
+    organization, group = get_org_and_group(organization_id, group_id)
     if not organization or not group:
         return error(404, "Grupo no encontrado")
 
-    org_role = get_role(user, organization)
-    if org_role not in (Membership.Role.OWNER, Membership.Role.ADMIN) and _group_role(user, group) is None:
+    if not Access(user, organization, group).can_view_group:
         return error(403, "No tenés acceso a este grupo")
 
     memberships = GroupMembership.objects.filter(group=group).select_related('user')
@@ -53,22 +47,18 @@ def listar_miembros_grupo(request: Request, organization_id: int, group_id: int)
 
 def agregar_miembro_grupo(request: Request, organization_id: int, group_id: int) -> tuple[dict[str, Any], int]:
     """Group lead agrega a un Member de la organización como contributor (RF-17)."""
-    organization, group = _get_org_and_group(organization_id, group_id)
+    organization, group = get_org_and_group(organization_id, group_id)
     if not organization or not group:
         return error(404, "Grupo no encontrado")
 
-    if _group_role(cast(Users, request.user), group) != GroupMembership.Role.GROUP_LEAD:
+    if not Access(cast(Users, request.user), organization, group).is_group_lead:
         return error(403, "Solo el group lead puede agregar miembros al grupo")
 
-    attributes = extract_attributes(request)
-    if attributes is None:
-        return error(400, "El body debe seguir la estructura JSON:API: { data: { type, attributes } }")
+    body, err = parse_body(request, AddGroupMemberSerializer)
+    if err:
+        return err
 
-    serializer = AddGroupMemberSerializer(data=attributes)
-    if not serializer.is_valid():
-        return {"errors": serializer_errors(serializer)}, 400
-
-    user_id = serializer.validated_data['user_id']
+    user_id = body['user_id']
 
     if not Membership.objects.filter(organization=organization, user_id=user_id).exists():
         return error(400, "El usuario debe ser miembro de la organización antes de sumarlo a un grupo")
@@ -86,25 +76,21 @@ def cambiar_rol_miembro_grupo(
     request: Request, organization_id: int, group_id: int, user_id: int,
 ) -> tuple[dict[str, Any], int]:
     """Owner asigna group_lead (RF-15); el lead saliente pasa a contributor. Bootstrapea la membership si no existía."""
-    organization, group = _get_org_and_group(organization_id, group_id)
+    organization, group = get_org_and_group(organization_id, group_id)
     if not organization or not group:
         return error(404, "Grupo no encontrado")
 
-    if get_role(cast(Users, request.user), organization) != Membership.Role.OWNER:
+    if not Access(cast(Users, request.user), organization).is_owner:
         return error(403, "Solo el owner puede asignar el rol de group lead")
 
     if not Membership.objects.filter(organization=organization, user_id=user_id).exists():
         return error(400, "El usuario debe ser miembro de la organización")
 
-    attributes = extract_attributes(request)
-    if attributes is None:
-        return error(400, "El body debe seguir la estructura JSON:API: { data: { type, attributes } }")
+    body, err = parse_body(request, UpdateGroupMemberRoleSerializer)
+    if err:
+        return err
 
-    serializer = UpdateGroupMemberRoleSerializer(data=attributes)
-    if not serializer.is_valid():
-        return {"errors": serializer_errors(serializer)}, 400
-
-    new_role = serializer.validated_data['role']
+    new_role = body['role']
 
     # No usamos GroupMembership.objects.filter(...).first() seguido de un 404: el Owner puede asignar
     # el rol de group lead (RF-15) a alguien que todavía no tiene fila en este grupo — si no, nadie podría
@@ -135,11 +121,11 @@ def eliminar_miembro_grupo(
     request: Request, organization_id: int, group_id: int, user_id: int,
 ) -> tuple[dict[str, Any] | None, int]:
     """Group lead saca a un miembro del grupo (RF-18); no se puede sacar al propio group lead."""
-    organization, group = _get_org_and_group(organization_id, group_id)
+    organization, group = get_org_and_group(organization_id, group_id)
     if not organization or not group:
         return error(404, "Grupo no encontrado")
 
-    if _group_role(cast(Users, request.user), group) != GroupMembership.Role.GROUP_LEAD:
+    if not Access(cast(Users, request.user), organization, group).is_group_lead:
         return error(403, "Solo el group lead puede eliminar miembros del grupo")
 
     target = GroupMembership.objects.filter(group=group, user_id=user_id).first()
@@ -149,5 +135,7 @@ def eliminar_miembro_grupo(
     if target.role == GroupMembership.Role.GROUP_LEAD:
         return error(400, "No se puede eliminar al group lead: reasigná el rol primero")
 
-    target.delete()
+    with transaction.atomic():
+        quitar_asignaciones(user_id, Task.objects.filter(project__group=group))
+        target.delete()
     return None, 204

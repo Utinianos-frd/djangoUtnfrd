@@ -6,37 +6,25 @@ from ..models.users import Users
 from ..serializers.register_serializer import RegisterSerializer
 from ..serializers.update_profile_serializer import UpdateProfileSerializer
 from datetime import datetime, timezone
-
-
-def _error(status_code: int, detail: str) -> tuple[dict[str, Any], int]:
-    """Arma un error en formato JSON:API: { errors: [{ status, detail }] }."""
-    return {"errors": [{"status": str(status_code), "detail": detail}]}, status_code
-
-
-def _extract_attributes(request: Request) -> dict[str, Any] | None:
-    """Saca request.data['data']['attributes'] del body JSON:API, o None si no tiene esa forma."""
-    try:
-        return request.data['data']['attributes']
-    except (KeyError, TypeError):
-        return None
+from app.common.jsonapi import INVALID_BODY, error, extract_attributes, parse_body
 
 
 def login_usuario(request: Request) -> tuple[dict[str, Any], int]:
     """Autentica username+password y devuelve un par de tokens JWT (access/refresh)."""
-    attributes = _extract_attributes(request)
+    attributes = extract_attributes(request)
     if attributes is None:
-        return _error(400, "El body debe seguir la estructura JSON:API: { data: { type, attributes } }")
+        return error(400, INVALID_BODY)
 
     username = attributes.get('username')
     password = attributes.get('password')
 
     if not username or not password:
-        return _error(400, "username y password son requeridos")
+        return error(400, "username y password son requeridos")
 
     user = authenticate(request, username=username, password=password)
 
     if not user:
-        return _error(401, "Credenciales inválidas")
+        return error(401, "Credenciales inválidas")
 
     refresh = RefreshToken.for_user(user)
     return {
@@ -53,25 +41,15 @@ def login_usuario(request: Request) -> tuple[dict[str, Any], int]:
 
 def register_usuario(request: Request) -> tuple[dict[str, Any], int]:
     """Crea un Users nuevo (username/email únicos) y lo loguea de una, devolviendo tokens JWT."""
-    attributes = _extract_attributes(request)
-    if attributes is None:
-        return _error(400, "El body debe seguir la estructura JSON:API: { data: { type, attributes } }")
-
-    serializer = RegisterSerializer(data=attributes)
-    if not serializer.is_valid():
-        errors = [
-            {"status": "400", "source": {"pointer": f"/data/attributes/{field}"}, "detail": str(msgs[0])}
-            for field, msgs in serializer.errors.items()
-        ]
-        return {"errors": errors}, 400
-
-    data = serializer.validated_data
+    data, err = parse_body(request, RegisterSerializer)
+    if err:
+        return err
 
     if Users.objects.filter(username=data['username']).exists():
-        return _error(409, "El username ya está en uso")
+        return error(409, "El username ya está en uso")
 
     if Users.objects.filter(email=data['email']).exists():
-        return _error(409, "El email ya está registrado")
+        return error(409, "El email ya está registrado")
 
     user = Users.objects.create_user(
         username=data['username'],
@@ -118,20 +96,12 @@ def get_perfil_usuario(user: Users) -> dict[str, Any]:
 
 def update_perfil_usuario(request: Request) -> tuple[dict[str, Any], int]:
     """Edita el perfil del usuario autenticado (PATCH /auth/me)."""
-    attributes = _extract_attributes(request)
-    if attributes is None:
-        return _error(400, "El body debe seguir la estructura JSON:API: { data: { type, attributes } }")
-
-    serializer = UpdateProfileSerializer(data=attributes, partial=True)
-    if not serializer.is_valid():
-        errors = [
-            {"status": "400", "source": {"pointer": f"/data/attributes/{field}"}, "detail": str(msgs[0])}
-            for field, msgs in serializer.errors.items()
-        ]
-        return {"errors": errors}, 400
+    body, err = parse_body(request, UpdateProfileSerializer, partial=True)
+    if err:
+        return err
 
     user = request.user
-    for field, value in serializer.validated_data.items():
+    for field, value in body.items():
         setattr(user, field, value)
     user.save()
 

@@ -5,8 +5,9 @@ from app.users.models import Users
 from app.organizations.models import Organization, Group
 from ..models import Task, Comment
 from ..serializers.create_comment_serializer import CreateCommentSerializer
-from .common import error, extract_attributes, serializer_errors
-from .task_service import _get_org_group_project, _can_view_task, _is_group_lead
+from app.common.jsonapi import error, parse_body
+from app.organizations.access import Access
+from .task_service import _get_org_group_project
 
 
 def _comment_resource(comment: Comment) -> dict[str, Any]:
@@ -41,7 +42,7 @@ def listar_comentarios(
     if not task:
         return error(404, "Tarea no encontrada")
 
-    if not _can_view_task(cast(Users, request.user), organization, group, task):
+    if not Access(cast(Users, request.user), organization, group).can_view_task(task):
         return error(403, "No tenés acceso a esta tarea")
 
     comments = task.comments.select_related('author')
@@ -57,18 +58,15 @@ def crear_comentario(
     if not task:
         return error(404, "Tarea no encontrada")
 
-    is_lead = _is_group_lead(user, group)
-    is_assigned = task.assignees.filter(id=user.id).exists()
+    access = Access(user, organization, group)
+    is_lead = access.is_group_lead
+    is_assigned = access.is_active_assignee(task)
     if not (is_lead or is_assigned):
         return error(403, "Solo el group lead o un contributor asignado puede comentar esta tarea")
 
-    attributes = extract_attributes(request)
-    if attributes is None:
-        return error(400, "El body debe seguir la estructura JSON:API: { data: { type, attributes } }")
+    body, err = parse_body(request, CreateCommentSerializer)
+    if err:
+        return err
 
-    serializer = CreateCommentSerializer(data=attributes)
-    if not serializer.is_valid():
-        return {"errors": serializer_errors(serializer)}, 400
-
-    comment = Comment.objects.create(task=task, author=user, text=serializer.validated_data['text'])
+    comment = Comment.objects.create(task=task, author=user, text=body['text'])
     return {"data": _comment_resource(comment)}, 201
