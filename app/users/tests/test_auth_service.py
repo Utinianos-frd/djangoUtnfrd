@@ -137,6 +137,27 @@ class TestMe:
             'first_name': '', 'last_name': '', 'age': None, 'phone': '', 'bio': '', 'avatar_url': '',
         }
 
+    def test_patch_edita_el_perfil(self, call, make_user):
+        user = make_user('alex')
+
+        status, data = call(
+            me, 'patch', '/', user,
+            {'data': {'type': 'users', 'attributes': {'first_name': 'Alex', 'age': 30, 'bio': 'Backend'}}},
+        )
+
+        assert status == 200
+        assert data['data']['attributes']['first_name'] == 'Alex'
+        user.refresh_from_db()
+        assert (user.first_name, user.age, user.bio) == ('Alex', 30, 'Backend')
+
+    def test_patch_con_dato_invalido_da_400_con_pointer(self, call, make_user):
+        user = make_user('alex')
+
+        status, data = call(me, 'patch', '/', user, {'data': {'type': 'users', 'attributes': {'age': -1}}})
+
+        assert status == 400
+        assert data['errors'][0]['source']['pointer'] == '/data/attributes/age'
+
     def test_sin_autenticar_da_401(self, call):
         status, _data = call(me, 'get', '/')
 

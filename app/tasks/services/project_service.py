@@ -45,6 +45,7 @@ def _project_resource(project: Project) -> dict[str, Any]:
         "id": str(project.id),
         "attributes": {
             "name": project.name,
+            "description": project.description,
             "group_id": project.group_id,
         },
     }
@@ -67,7 +68,11 @@ def crear_proyecto(request: Request, organization_id: int, group_id: int) -> tup
     if not serializer.is_valid():
         return {"errors": serializer_errors(serializer)}, 400
 
-    project = Project.objects.create(group=group, name=serializer.validated_data['name'])
+    project = Project.objects.create(
+        group=group,
+        name=serializer.validated_data['name'],
+        description=serializer.validated_data['description'],
+    )
     return {"data": _project_resource(project)}, 201
 
 
@@ -105,7 +110,7 @@ def obtener_proyecto(
 def actualizar_proyecto(
     request: Request, organization_id: int, group_id: int, project_id: int,
 ) -> tuple[dict[str, Any], int]:
-    """Renombra el proyecto; solo owner."""
+    """Edita nombre y/o descripción del proyecto; solo owner."""
     organization, group = _get_org_and_group(organization_id, group_id)
     if not organization or not group:
         return error(404, "Grupo no encontrado")
@@ -125,8 +130,9 @@ def actualizar_proyecto(
     if not serializer.is_valid():
         return {"errors": serializer_errors(serializer)}, 400
 
-    if 'name' in serializer.validated_data:
-        project.name = serializer.validated_data['name']
+    if serializer.validated_data:
+        for field, value in serializer.validated_data.items():
+            setattr(project, field, value)
         project.save()
 
     return {"data": _project_resource(project)}, 200

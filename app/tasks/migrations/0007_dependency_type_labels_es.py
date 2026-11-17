@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('tasks', '0005_task_description_closed_at'),
+        ('tasks', '0006_project_description'),
     ]
 
     operations = [

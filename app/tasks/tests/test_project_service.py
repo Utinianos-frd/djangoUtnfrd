@@ -21,7 +21,16 @@ class TestCrearProyecto:
         status, data = call(projects, 'post', '/', org_group.owner, _project_payload(name='Web'), **group_kwargs)
 
         assert status == 201
-        assert data['data']['attributes'] == {'name': 'Web', 'group_id': org_group.group.id}
+        assert data['data']['attributes'] == {'name': 'Web', 'description': '', 'group_id': org_group.group.id}
+
+    def test_owner_puede_crear_proyecto_con_descripcion(self, call, org_group, group_kwargs):
+        status, data = call(
+            projects, 'post', '/', org_group.owner,
+            _project_payload(name='Web', description='Sitio público'), **group_kwargs,
+        )
+
+        assert status == 201
+        assert data['data']['attributes']['description'] == 'Sitio público'
 
     @pytest.mark.parametrize('role', ['admin', 'lead', 'contributor'])
     def test_solo_el_owner_puede_crear(self, call, org_group, group_kwargs, role):
@@ -89,6 +98,17 @@ class TestVerEditarEliminarProyecto:
         assert data['data']['attributes']['name'] == 'API v2'
         org_group.project.refresh_from_db()
         assert org_group.project.name == 'API v2'
+
+    def test_owner_edita_la_descripcion_sin_tocar_el_nombre(self, call, org_group, project_kwargs):
+        status, data = call(
+            project_detail, 'patch', '/', org_group.owner, _project_payload(description='Backend REST'),
+            **project_kwargs,
+        )
+
+        assert status == 200
+        org_group.project.refresh_from_db()
+        assert org_group.project.description == 'Backend REST'
+        assert org_group.project.name == data['data']['attributes']['name'] == 'API'
 
     def test_group_lead_no_puede_renombrar(self, call, org_group, project_kwargs):
         status, _data = call(project_detail, 'patch', '/', org_group.lead, _project_payload(name='API v2'), **project_kwargs)

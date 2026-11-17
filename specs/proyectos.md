@@ -22,6 +22,7 @@ Spec técnico de la entidad `Project`, tercer nivel de la jerarquía Organizaci�
 |---|---|---|
 | `group` | FK → `organizations.Group`, `on_delete=CASCADE` | `related_name='projects'`, obligatorio |
 | `name` | CharField(255) | |
+| `description` | TextField, `blank=True`, default `''` | Opcional |
 | `created_at` | DateTimeField, `auto_now_add=True` | |
 
 - Tabla: `projects`.
@@ -42,14 +43,14 @@ Spec técnico de la entidad `Project`, tercer nivel de la jerarquía Organizaci�
 ### 3.1. `POST /projects` — crear proyecto
 
 ```json
-{ "data": { "type": "projects", "attributes": { "name": "API Core" } } }
+{ "data": { "type": "projects", "attributes": { "name": "API Core", "description": "Servicios REST del backend" } } }
 ```
 
-El `group` sale de la URL, no del body (ya es parte del path `.../groups/{group_id}/projects`).
+`description` es opcional (default `""`). El `group` sale de la URL, no del body (ya es parte del path `.../groups/{group_id}/projects`).
 
 **Response 201**
 ```json
-{ "data": { "type": "projects", "id": "1", "attributes": { "name": "API Core", "group_id": 2 } } }
+{ "data": { "type": "projects", "id": "1", "attributes": { "name": "API Core", "description": "Servicios REST del backend", "group_id": 2 } } }
 ```
 
 **Errores**: `404` (organización o grupo inexistente — mismo código para "no existe la org" y "no existe el grupo dentro de ella", no se distingue), `403` (no-owner), `400` (falta `name`).
@@ -59,12 +60,12 @@ El `group` sale de la URL, no del body (ya es parte del path `.../groups/{group_
 Visible para Owner/Admin de la organización (supervisión general) o cualquier miembro del grupo — group lead o contributor (RF-24: "mostrar al Group Lead los proyectos asignados a su grupo"; se extendió a Contributor porque sus tareas van a vivir dentro de estos proyectos).
 
 ```json
-{ "data": [ { "type": "projects", "id": "1", "attributes": { "name": "API Core", "group_id": 2 } } ] }
+{ "data": [ { "type": "projects", "id": "1", "attributes": { "name": "API Core", "description": "Servicios REST del backend", "group_id": 2 } } ] }
 ```
 
 ### 3.3-3.5. `GET` / `PATCH` / `DELETE /projects/{id}`
 
-Mismo patrón que el resto de la API (ver organizaciones-abm.md §2.3-2.5). `DELETE` es Owner-only (RF-22: "se eliminan las tareas en cascada" — la cascada hacia `Task` queda preparada a nivel de FK una vez que ese modelo exista; hoy un proyecto no tiene tareas que arrastrar).
+Mismo patrón que el resto de la API (ver organizaciones-abm.md §2.3-2.5). El `PATCH` es parcial: acepta `name` y/o `description`. `DELETE` es Owner-only (RF-22: "se eliminan las tareas en cascada" — la cascada hacia `Task` queda preparada a nivel de FK una vez que ese modelo exista; hoy un proyecto no tiene tareas que arrastrar).
 
 ## 4. Decisiones de diseño
 

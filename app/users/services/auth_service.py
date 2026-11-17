@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 import requests
 from django.conf import settings
 from django.contrib.auth import authenticate
@@ -242,7 +242,7 @@ def update_perfil_usuario(request: Request) -> tuple[dict[str, Any], int]:
         ]
         return {"errors": errors}, 400
 
-    user = request.user
+    user = cast(Users, request.user)
     for field, value in serializer.validated_data.items():
         setattr(user, field, value)
     user.save()
