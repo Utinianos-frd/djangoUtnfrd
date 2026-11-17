@@ -105,10 +105,20 @@ class TestSesionActiva:
         assert status == 200
         assert data['data']['id'] == str(active_session.id)
 
-    def test_sin_sesion_activa_da_404(self, call, focus_user, active_session):
-        status, _data = call(active_focus_session, 'get', '/', focus_user.other)
+    def test_sin_sesion_activa_da_200_con_data_null(self, call, focus_user, active_session):
+        status, data = call(active_focus_session, 'get', '/', focus_user.other)
 
-        assert status == 404
+        assert status == 200
+        assert data == {"data": None}
+
+    def test_sesion_terminada_no_cuenta_como_activa(self, call, focus_user, active_session):
+        active_session.status = FocusSession.Status.ENDED
+        active_session.save()
+
+        status, data = call(active_focus_session, 'get', '/', focus_user.user)
+
+        assert status == 200
+        assert data['data'] is None
 
 
 class TestFinalizarSesion:

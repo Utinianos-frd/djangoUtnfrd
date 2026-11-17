@@ -92,14 +92,32 @@ def _dependency_block_reason(task: Task, new_status: str) -> str | None:
     for dep in pending_blockers:
         if dep.dependency_type == TaskDependency.Type.FINISH_TO_START and new_status != Task.Status.PENDING:
             return (
-                f"No se puede avanzar: depende de '{dep.blocking_task.title}' (finish-to-start), "
+                f"No se puede avanzar: depende de '{dep.blocking_task.title}' ({dep.get_dependency_type_display()}), "
                 "que todavía no está completada"
             )
         if dep.dependency_type == TaskDependency.Type.FINISH_TO_FINISH and new_status == Task.Status.DONE:
             return (
-                f"No se puede completar: depende de '{dep.blocking_task.title}' (finish-to-finish), "
+                f"No se puede completar: depende de '{dep.blocking_task.title}' ({dep.get_dependency_type_display()}), "
                 "que todavía no está completada"
             )
+    return None
+
+
+def _reopen_block_reason(task: Task, new_status: str) -> str | None:
+    """Si se reabre una tarea 'done' y alguna dependiente FS ya arrancó, quedaría in_progress y bloqueada a la vez:
+    se rechaza. Las dependientes que siguen en 'pending' simplemente vuelven a quedar bloqueadas."""
+    if task.status != Task.Status.DONE or new_status == Task.Status.DONE:
+        return None
+
+    advanced_titles = list(
+        Task.objects.filter(
+            blocked_by__blocking_task=task,
+            blocked_by__dependency_type=TaskDependency.Type.FINISH_TO_START,
+        ).exclude(status=Task.Status.PENDING).order_by('id').values_list('title', flat=True)
+    )
+    if advanced_titles:
+        titles = ", ".join(f"'{title}'" for title in advanced_titles)
+        return f"No se puede reabrir: las tareas {titles} dependen de esta y ya avanzaron"
     return None
 
 
@@ -146,11 +164,15 @@ def crear_tarea(request: Request, organization_id: int, group_id: int, project_i
     if invalid:
         return invalid
 
-    task = Task.objects.create(
+    # Una tarea nueva todavía no tiene dependencias, así que _dependency_block_reason nunca la frenaría:
+    # cualquier status válido se respeta tal cual. _set_status completa closed_at si nace en 'done'.
+    task = Task(
         project=project,
         title=serializer.validated_data['title'],
         description=serializer.validated_data['description'],
     )
+    _set_status(task, serializer.validated_data['status'])
+    task.save()
     if assignee_ids:
         task.assignees.set(assignee_ids)
 
@@ -231,7 +253,8 @@ def actualizar_tarea(
                 return invalid
 
         if 'status' in lead_serializer.validated_data:
-            block_reason = _dependency_block_reason(task, lead_serializer.validated_data['status'])
+            new_status = lead_serializer.validated_data['status']
+            block_reason = _dependency_block_reason(task, new_status) or _reopen_block_reason(task, new_status)
             if block_reason:
                 return error(409, block_reason)
 
@@ -260,7 +283,8 @@ def actualizar_tarea(
     if not status_serializer.is_valid():
         return {"errors": serializer_errors(status_serializer)}, 400
 
-    block_reason = _dependency_block_reason(task, status_serializer.validated_data['status'])
+    new_status = status_serializer.validated_data['status']
+    block_reason = _dependency_block_reason(task, new_status) or _reopen_block_reason(task, new_status)
     if block_reason:
         return error(409, block_reason)
 

@@ -5,8 +5,8 @@ class TaskDependency(models.Model):
     """blocking_task tiene que completarse antes de que blocked_task pueda avanzar (FS) o completarse (FF)."""
 
     class Type(models.TextChoices):
-        FINISH_TO_START = 'FS', 'Finish to Start'  # blocked no puede salir de 'pending' hasta que blocking esté 'done'
-        FINISH_TO_FINISH = 'FF', 'Finish to Finish'  # blocked no puede llegar a 'done' hasta que blocking esté 'done'
+        FINISH_TO_START = 'FS', 'Fin → Inicio'  # blocked no puede salir de 'pending' hasta que blocking esté 'done'
+        FINISH_TO_FINISH = 'FF', 'Fin → Fin'  # blocked no puede llegar a 'done' hasta que blocking esté 'done'
 
     blocking_task = models.ForeignKey(
         'tasks.Task',

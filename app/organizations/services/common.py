@@ -18,10 +18,17 @@ def extract_attributes(request: Request) -> dict[str, Any] | None:
         return None
 
 
+def _first_message(msgs: Any) -> str:
+    """Primer mensaje de un campo. En un ListField los errores vienen por índice ({1: [...]}), no como lista."""
+    while isinstance(msgs, (dict, list)):
+        msgs = next(iter(msgs.values())) if isinstance(msgs, dict) else msgs[0]
+    return str(msgs)
+
+
 def serializer_errors(serializer: Serializer) -> list[dict[str, Any]]:
     """Convierte serializer.errors en el formato de error JSON:API, con source.pointer por campo."""
     return [
-        {"status": "400", "source": {"pointer": f"/data/attributes/{field}"}, "detail": str(msgs[0])}
+        {"status": "400", "source": {"pointer": f"/data/attributes/{field}"}, "detail": _first_message(msgs)}
         for field, msgs in serializer.errors.items()
     ]
 

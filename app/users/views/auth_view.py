@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from ..models.users import Users
 from drf_spectacular.utils import extend_schema, OpenApiExample, OpenApiResponse
 from drf_spectacular.types import OpenApiTypes
-from ..services.auth_service import login_usuario, register_usuario, get_perfil_usuario, update_perfil_usuario
+from ..services.auth_service import login_usuario, register_usuario, google_login_usuario, get_perfil_usuario, update_perfil_usuario
 
 
 _JSONAPI_ERROR_EXAMPLE = OpenApiExample(
@@ -141,6 +141,52 @@ def login(request: Request) -> Response:
 def register(request: Request) -> Response:
     """POST /auth/register — wrapper fino sobre auth_service.register_usuario."""
     data, status = register_usuario(request)
+    return Response(data, status=status)
+
+
+@extend_schema(
+    tags=['Auth'],
+    summary='Iniciar sesión / registrarse con Google',
+    description=(
+        'Recibe el `id_token` que emite Google Identity Services en el frontend, lo valida '
+        'contra Google y busca o crea el usuario con ese email. Devuelve tokens JWT igual que '
+        'el login normal (201 si la cuenta se creó en esta llamada, 200 si ya existía).'
+    ),
+    request={
+        'application/json': {
+            'type': 'object',
+            'required': ['data'],
+            'properties': {
+                'data': {
+                    'type': 'object',
+                    'required': ['type', 'attributes'],
+                    'properties': {
+                        'type': {'type': 'string', 'enum': ['sessions']},
+                        'attributes': {
+                            'type': 'object',
+                            'required': ['id_token'],
+                            'properties': {
+                                'id_token': {'type': 'string', 'example': '<google_id_token>'},
+                            },
+                        },
+                    },
+                }
+            },
+        }
+    },
+    responses={
+        200: OpenApiResponse(description='Sesión iniciada (cuenta existente)'),
+        201: OpenApiResponse(description='Cuenta creada e iniciada'),
+        400: OpenApiResponse(description='Falta el id_token o body inválido', examples=[_JSONAPI_ERROR_EXAMPLE]),
+        401: OpenApiResponse(description='Token de Google inválido', examples=[_JSONAPI_ERROR_EXAMPLE]),
+        503: OpenApiResponse(description='Login con Google no configurado', examples=[_JSONAPI_ERROR_EXAMPLE]),
+    },
+)
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def google_login(request: Request) -> Response:
+    """POST /auth/google — wrapper fino sobre auth_service.google_login_usuario."""
+    data, status = google_login_usuario(request)
     return Response(data, status=status)
 
 

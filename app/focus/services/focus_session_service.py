@@ -68,10 +68,11 @@ def iniciar_sesion(request: Request) -> tuple[dict[str, Any], int]:
 
 
 def obtener_sesion_activa(request: Request) -> tuple[dict[str, Any], int]:
-    """Sesión activa del usuario, si tiene una (para que el frontend la recupere al recargar)."""
+    """Sesión activa del usuario, o {"data": null} si no tiene (JSON:API: recurso vacío, no un 404).
+    El frontend la consulta en cada carga, así que "no hay sesión" es un caso normal, no un error."""
     session = FocusSession.objects.filter(user=cast(Users, request.user), status=FocusSession.Status.ACTIVE).first()
     if not session:
-        return error(404, "No tenés una sesión de modo foco activa")
+        return {"data": None}, 200
     return {"data": _session_resource(session)}, 200
 
 

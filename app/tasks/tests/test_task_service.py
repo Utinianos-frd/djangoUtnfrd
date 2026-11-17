@@ -1,4 +1,5 @@
 from datetime import timedelta
+from typing import Any
 
 import pytest
 from django.utils import timezone
@@ -88,6 +89,63 @@ class TestCrearTarea:
         assert warning['user_id'] == org_group.contributor.id
         assert warning['active_task_count'] == 2
         assert set(warning['suggested_alternatives']) == {'lead', 'contributor2'}
+
+
+    @pytest.mark.parametrize('status_value', ['pending', 'in_progress'])
+    def test_respeta_el_status_enviado(self, call, org_group, project_kwargs, status_value):
+        status, data = call(
+            tasks, 'post', '/', org_group.lead, _task_payload(title='Login', status=status_value), **project_kwargs,
+        )
+
+        assert status == 201
+        assert data['data']['attributes']['status'] == status_value
+        assert data['data']['attributes']['closed_at'] is None
+        assert Task.objects.get().status == status_value
+
+    def test_crear_en_done_completa_la_fecha_de_cierre(self, call, org_group, project_kwargs):
+        status, data = call(
+            tasks, 'post', '/', org_group.lead, _task_payload(title='Login', status='done'), **project_kwargs,
+        )
+
+        assert status == 201
+        assert data['data']['attributes']['status'] == Task.Status.DONE
+        assert data['data']['attributes']['closed_at'] is not None
+        assert Task.objects.get().closed_at is not None
+
+    @pytest.mark.parametrize('status_value', ['foo', 'blocked', 'XX', ''])
+    def test_status_invalido_da_400_y_no_crea_nada(self, call, org_group, project_kwargs, status_value):
+        status, data = call(
+            tasks, 'post', '/', org_group.lead, _task_payload(title='Login', status=status_value), **project_kwargs,
+        )
+
+        assert status == 400
+        assert data['errors'][0]['source']['pointer'] == '/data/attributes/status'
+        assert not Task.objects.exists()
+
+    def test_errores_de_validacion_en_espanol_y_sin_prefijo_de_campo(self, call, org_group, project_kwargs):
+        cases: list[tuple[dict[str, Any], str]] = [
+            ({'title': 'x' * 256}, 'Asegúrese de que este campo no tenga más de 255 caracteres.'),
+            ({'title': ''}, 'Este campo no puede estar en blanco.'),
+            ({'title': 'Login', 'status': 'XX'}, '"XX" no es una elección válida.'),
+            ({'title': ['no', 'texto']}, 'Este campo tiene que ser un texto.'),
+        ]
+        for attrs, expected in cases:
+            status, data = call(tasks, 'post', '/', org_group.lead, _task_payload(**attrs), **project_kwargs)
+
+            assert status == 400
+            detail = data['errors'][0]['detail']
+            assert detail == expected
+            assert not detail.startswith(('title:', 'status:'))
+
+    def test_asignado_con_id_invalido_en_la_lista_da_400_no_500(self, call, org_group, project_kwargs):
+        status, data = call(
+            tasks, 'post', '/', org_group.lead,
+            _task_payload(title='Login', assignee_ids=[org_group.contributor.id, 'x']), **project_kwargs,
+        )
+
+        assert status == 400
+        assert data['errors'][0]['source']['pointer'] == '/data/attributes/assignee_ids'
+        assert data['errors'][0]['detail'] == 'Introduzca un número entero válido.'
 
 
 class TestListarTareas:
@@ -248,6 +306,41 @@ class TestActualizarTarea:
         assert status == 400
         assert task.assignees.count() == 0
 
+    def test_patch_de_asignados_devuelve_warning_con_el_mismo_formato_que_el_post(
+        self, call, org_group, project_kwargs, make_task,
+    ):
+        org_group.organization.overload_threshold = 2
+        org_group.organization.save()
+        make_task(assignees=[org_group.contributor])
+        task = make_task('Otra')
+
+        status, data = call(
+            task_detail, 'patch', '/', org_group.lead, _task_payload(assignee_ids=[org_group.contributor.id]),
+            task_id=task.id, **project_kwargs,
+        )
+
+        assert status == 200
+        assert data['meta']['warnings'] == [{
+            'user_id': org_group.contributor.id,
+            'username': 'contributor',
+            'active_task_count': 2,
+            'detail': 'contributor está sobrecargado/a (2 tareas activas, umbral 2)',
+            'suggested_alternatives': ['lead', 'contributor2'],
+        }]
+
+    def test_patch_sin_tocar_asignados_no_devuelve_meta(self, call, org_group, project_kwargs, make_task):
+        org_group.organization.overload_threshold = 1
+        org_group.organization.save()
+        task = make_task(assignees=[org_group.contributor])
+
+        status, data = call(
+            task_detail, 'patch', '/', org_group.lead, _task_payload(title='Renombrada'),
+            task_id=task.id, **project_kwargs,
+        )
+
+        assert status == 200
+        assert 'meta' not in data
+
     def test_status_invalido_da_400(self, call, org_group, project_kwargs, make_task):
         task = make_task()
 
@@ -357,6 +450,120 @@ class TestBloqueoPorDependencias:
         assert start_status == 200
         assert start_data['data']['attributes']['blocked'] is False  # el candado es solo para FS
         assert done_status == 409
+
+    def test_mensaje_fs_usa_la_etiqueta_en_espanol(self, call, org_group, project_kwargs, make_task):
+        blocking = make_task('Diseño')
+        blocked = make_task('Implementación')
+        self._depend(blocking, blocked, TaskDependency.Type.FINISH_TO_START)
+
+        status, data = self._patch_status(call, org_group.lead, blocked, 'in_progress', project_kwargs)
+
+        assert status == 409
+        assert data['errors'][0]['detail'] == (
+            "No se puede avanzar: depende de 'Diseño' (Fin → Inicio), que todavía no está completada"
+        )
+
+    def test_mensaje_ff_usa_la_etiqueta_en_espanol(self, call, org_group, project_kwargs, make_task):
+        blocking = make_task('Backend')
+        blocked = make_task('Frontend', status=Task.Status.IN_PROGRESS)
+        self._depend(blocking, blocked, TaskDependency.Type.FINISH_TO_FINISH)
+
+        status, data = self._patch_status(call, org_group.lead, blocked, 'done', project_kwargs)
+
+        assert status == 409
+        assert data['errors'][0]['detail'] == (
+            "No se puede completar: depende de 'Backend' (Fin → Fin), que todavía no está completada"
+        )
+
+
+class TestReabrirTareaBloqueante:
+    """Bug QA: reabrir A (done) con una dependiente FS ya avanzada dejaba a B in_progress y blocked a la vez."""
+
+    def _depend(self, blocking, blocked, dependency_type=TaskDependency.Type.FINISH_TO_START):
+        TaskDependency.objects.create(blocking_task=blocking, blocked_task=blocked, dependency_type=dependency_type)
+
+    def _patch_status(self, call, user, task, new_status, project_kwargs):
+        return call(
+            task_detail, 'patch', '/', user, _task_payload(status=new_status),
+            task_id=task.id, **project_kwargs,
+        )
+
+    def test_flujo_completo_del_reporte_de_qa(self, call, org_group, project_kwargs, make_task):
+        a = make_task('A')
+        b = make_task('B')
+        self._depend(a, b)
+
+        assert self._patch_status(call, org_group.lead, a, 'done', project_kwargs)[0] == 200
+        assert self._patch_status(call, org_group.lead, b, 'in_progress', project_kwargs)[0] == 200
+        status, data = self._patch_status(call, org_group.lead, a, 'pending', project_kwargs)
+
+        assert status == 409
+        assert data['errors'][0]['detail'] == "No se puede reabrir: las tareas 'B' dependen de esta y ya avanzaron"
+        a.refresh_from_db()
+        assert a.status == Task.Status.DONE
+        assert a.closed_at is not None
+        _s, b_detail = call(task_detail, 'get', '/', org_group.lead, task_id=b.id, **project_kwargs)
+        assert b_detail['data']['attributes']['status'] == 'in_progress'
+        assert b_detail['data']['attributes']['blocked'] is False
+
+    @pytest.mark.parametrize('new_status', ['pending', 'in_progress'])
+    def test_lista_todas_las_dependientes_avanzadas(
+        self, call, org_group, project_kwargs, make_task, new_status,
+    ):
+        a = make_task('A', status=Task.Status.DONE)
+        b = make_task('B', status=Task.Status.IN_PROGRESS)
+        c = make_task('C', status=Task.Status.DONE)
+        d = make_task('D')  # sigue pending: no impide reabrir
+        for dependent in (b, c, d):
+            self._depend(a, dependent)
+
+        status, data = self._patch_status(call, org_group.lead, a, new_status, project_kwargs)
+
+        assert status == 409
+        assert data['errors'][0]['detail'] == (
+            "No se puede reabrir: las tareas 'B', 'C' dependen de esta y ya avanzaron"
+        )
+
+    def test_dependientes_en_pending_vuelven_a_bloquearse(self, call, org_group, project_kwargs, make_task):
+        a = make_task('A', status=Task.Status.DONE)
+        b = make_task('B')
+        self._depend(a, b)
+
+        status, data = self._patch_status(call, org_group.lead, a, 'in_progress', project_kwargs)
+        _s, b_detail = call(task_detail, 'get', '/', org_group.lead, task_id=b.id, **project_kwargs)
+
+        assert status == 200
+        assert data['data']['attributes']['closed_at'] is None
+        assert b_detail['data']['attributes']['blocked'] is True
+
+    def test_dependiente_ff_avanzada_no_impide_reabrir(self, call, org_group, project_kwargs, make_task):
+        a = make_task('A', status=Task.Status.DONE)
+        b = make_task('B', status=Task.Status.IN_PROGRESS)
+        self._depend(a, b, TaskDependency.Type.FINISH_TO_FINISH)
+
+        status, _data = self._patch_status(call, org_group.lead, a, 'pending', project_kwargs)
+
+        assert status == 200
+
+    def test_tambien_frena_al_contributor(self, call, org_group, project_kwargs, make_task):
+        a = make_task('A', status=Task.Status.DONE, assignees=[org_group.contributor])
+        b = make_task('B', status=Task.Status.IN_PROGRESS)
+        self._depend(a, b)
+
+        status, _data = self._patch_status(call, org_group.contributor, a, 'pending', project_kwargs)
+
+        assert status == 409
+        a.refresh_from_db()
+        assert a.status == Task.Status.DONE
+
+    def test_reenviar_done_no_se_considera_reapertura(self, call, org_group, project_kwargs, make_task):
+        a = make_task('A', status=Task.Status.DONE)
+        b = make_task('B', status=Task.Status.IN_PROGRESS)
+        self._depend(a, b)
+
+        status, _data = self._patch_status(call, org_group.lead, a, 'done', project_kwargs)
+
+        assert status == 200
 
 
 class TestEliminarTarea:

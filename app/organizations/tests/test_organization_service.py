@@ -1,3 +1,5 @@
+import uuid
+
 import pytest
 from django.db import IntegrityError
 
@@ -278,6 +280,25 @@ class TestJoin:
         status, _data = call(join, 'post', '/join', make_user(), self._join_payload('00000000-0000-0000-0000-000000000000'))
 
         assert status == 404
+
+    @pytest.mark.parametrize('token', ['XX', 'no-es-un-uuid', '1234'])
+    def test_token_que_no_es_uuid_da_el_mismo_404_que_uno_inexistente(self, call, make_user, token):
+        status, data = call(join, 'post', '/join', make_user(), self._join_payload(token))
+
+        assert status == 404
+        assert data['errors'][0]['detail'] == 'Link de invitación inválido o inactivo'
+
+    def test_token_inexistente_tiene_el_mismo_mensaje(self, call, make_user):
+        status, data = call(join, 'post', '/join', make_user(), self._join_payload(uuid.uuid4()))
+
+        assert status == 404
+        assert data['errors'][0]['detail'] == 'Link de invitación inválido o inactivo'
+
+    def test_token_faltante_da_400_en_espanol(self, call, make_user):
+        status, data = call(join, 'post', '/join', make_user(), {"data": {"type": "invitations", "attributes": {}}})
+
+        assert status == 400
+        assert data['errors'][0]['detail'] == 'Este campo es requerido.'
 
     def test_token_desactivado_devuelve_404(self, call, owner_org, make_user):
         organization, _owner = owner_org

@@ -143,6 +143,13 @@ SIMPLE_JWT = {
 }
 
 
+# Client ID de la app de Google (Google Cloud Console → Credenciales → OAuth 2.0).
+# Es el mismo valor que usa el frontend al inicializar Google Identity Services, y acá
+# se usa para validar que el ID token que llega en POST /auth/google fue emitido para
+# NUESTRA app (claim `aud`). Sin este valor, el login con Google queda deshabilitado.
+GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
+
+
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
 
@@ -165,7 +172,10 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/5.0/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+# Español rioplatense fijo para toda la API (los mensajes propios ya usan voseo). Django tiene
+# catálogo es_AR; DRF solo trae 'es' y gettext cae ahí solo. A propósito NO usamos LocaleMiddleware:
+# con él, un navegador con Accept-Language: en volvería a recibir los errores en inglés.
+LANGUAGE_CODE = 'es-ar'
 
 TIME_ZONE = 'UTC'
 

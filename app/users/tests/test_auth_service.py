@@ -132,7 +132,10 @@ class TestMe:
 
         assert status == 200
         assert data['data']['id'] == str(user.id)
-        assert data['data']['attributes'] == {'username': 'alex', 'email': 'alex@example.com', 'role': 'user'}
+        assert data['data']['attributes'] == {
+            'username': 'alex', 'email': 'alex@example.com', 'role': 'user',
+            'first_name': '', 'last_name': '', 'age': None, 'phone': '', 'bio': '', 'avatar_url': '',
+        }
 
     def test_sin_autenticar_da_401(self, call):
         status, _data = call(me, 'get', '/')

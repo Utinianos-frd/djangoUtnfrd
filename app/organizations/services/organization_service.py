@@ -184,6 +184,9 @@ def unirse_a_organizacion(request: Request) -> tuple[dict[str, Any], int]:
 
     serializer = JoinSerializer(data=attributes)
     if not serializer.is_valid():
+        # Token que no es UUID: misma respuesta que uno inexistente, para no distinguir "mal formado" de "no existe".
+        if any(e.code == 'invalid' for e in serializer.errors.get('token', [])):
+            return error(404, "Link de invitación inválido o inactivo")
         return {"errors": serializer_errors(serializer)}, 400
 
     token = serializer.validated_data['token']

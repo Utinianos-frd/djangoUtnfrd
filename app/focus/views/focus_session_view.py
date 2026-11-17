@@ -22,6 +22,7 @@ def focus_sessions(request: Request) -> Response:
 @extend_schema(
     tags=['Focus'],
     summary='Ver mi sesión de modo foco activa',
+    description='Si no hay sesión activa devuelve 200 con {"data": null}.',
 )
 @api_view(['GET'])
 def active_focus_session(request: Request) -> Response:
