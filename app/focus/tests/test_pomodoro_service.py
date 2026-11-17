@@ -5,7 +5,7 @@ from django.utils import timezone
 
 from app.focus.models import FocusSession, Pomodoro
 from app.focus.views.pomodoro_view import pomodoros, pomodoro_detail
-from app.tasks.models import Task
+from app.tasks.models import Task, TaskDependency
 
 pytestmark = pytest.mark.django_db
 
@@ -16,6 +16,13 @@ def _start_payload(task_id):
 
 def _action_payload(action):
     return {"data": {"type": "pomodoros", "attributes": {"action": action}}}
+
+
+def _switch_payload(task_id):
+    attrs = {"action": "switch_task"}
+    if task_id is not None:
+        attrs["task_id"] = task_id
+    return {"data": {"type": "pomodoros", "attributes": attrs}}
 
 
 @pytest.fixture
@@ -320,3 +327,79 @@ class TestPomodoroSobreTareaCompletada:
         assert status == 409
         assert data['errors'][0]['detail'] == 'Esa tarea ya está completada'
         assert not Pomodoro.objects.exists()
+
+
+class TestCambiarTareaDelPomodoro:
+    """PATCH action='switch_task': pasa el pomodoro en curso a otra tarea de la sesión."""
+
+    def _switch(self, call, focus_user, active_session, pomodoro, task_id):
+        return call(
+            pomodoro_detail, 'patch', '/', focus_user.user, _switch_payload(task_id),
+            session_id=active_session.id, pomodoro_id=pomodoro.id,
+        )
+
+    def test_cambia_la_tarea_de_un_pomodoro_corriendo(self, call, focus_user, active_session, make_pomodoro):
+        pomodoro = make_pomodoro(task=focus_user.task_a)
+
+        status, data = self._switch(call, focus_user, active_session, pomodoro, focus_user.task_b.id)
+
+        assert status == 200
+        assert data['data']['attributes']['task_id'] == focus_user.task_b.id
+        assert 'remaining_seconds' in data['data']['attributes']
+        pomodoro.refresh_from_db()
+        assert pomodoro.task_id == focus_user.task_b.id
+
+    def test_tambien_funciona_pausado(self, call, focus_user, active_session, make_pomodoro):
+        pomodoro = make_pomodoro(status=Pomodoro.Status.PAUSED, task=focus_user.task_a)
+
+        status, _data = self._switch(call, focus_user, active_session, pomodoro, focus_user.task_b.id)
+
+        assert status == 200
+
+    def test_sin_task_id_da_400(self, call, focus_user, active_session, make_pomodoro):
+        pomodoro = make_pomodoro()
+
+        status, data = self._switch(call, focus_user, active_session, pomodoro, None)
+
+        assert status == 400
+
+    def test_tarea_fuera_de_la_sesion_da_400(self, call, focus_user, active_session, make_pomodoro):
+        pomodoro = make_pomodoro()
+        ajena = Task.objects.create(project=focus_user.project, title='Ajena')
+
+        status, data = self._switch(call, focus_user, active_session, pomodoro, ajena.id)
+
+        assert status == 400
+        assert data['errors'][0]['detail'] == 'Esa tarea no forma parte del objetivo de esta sesión'
+
+    def test_tarea_completada_da_409(self, call, focus_user, active_session, make_pomodoro):
+        pomodoro = make_pomodoro(task=focus_user.task_a)
+        focus_user.task_b.status = Task.Status.DONE
+        focus_user.task_b.save()
+
+        status, data = self._switch(call, focus_user, active_session, pomodoro, focus_user.task_b.id)
+
+        assert status == 409
+        assert data['errors'][0]['detail'] == 'Esa tarea ya está completada'
+
+    def test_tarea_bloqueada_da_409(self, call, focus_user, active_session, make_pomodoro):
+        pomodoro = make_pomodoro(task=focus_user.task_a)
+        # task_b queda bloqueada por una dependencia FS con una tarea sin completar.
+        bloqueante = Task.objects.create(project=focus_user.project, title='Bloqueante')
+        TaskDependency.objects.create(
+            blocking_task=bloqueante, blocked_task=focus_user.task_b,
+            dependency_type=TaskDependency.Type.FINISH_TO_START,
+        )
+
+        status, data = self._switch(call, focus_user, active_session, pomodoro, focus_user.task_b.id)
+
+        assert status == 409
+        assert data['errors'][0]['detail'] == 'Esa tarea está bloqueada por otra tarea'
+
+    def test_pomodoro_ya_terminado_da_409(self, call, focus_user, active_session, make_pomodoro):
+        pomodoro = make_pomodoro(status=Pomodoro.Status.COMPLETED, task=focus_user.task_a)
+
+        status, data = self._switch(call, focus_user, active_session, pomodoro, focus_user.task_b.id)
+
+        assert status == 409
+        assert data['errors'][0]['detail'] == 'Solo se puede cambiar la tarea de un pomodoro en curso'

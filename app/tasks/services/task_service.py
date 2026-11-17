@@ -116,6 +116,8 @@ def _reopen_block_reason(task: Task, new_status: str) -> str | None:
         ).exclude(status=Task.Status.PENDING).order_by('id').values_list('title', flat=True)
     )
     if advanced_titles:
+        if len(advanced_titles) == 1:
+            return f"No se puede reabrir: la tarea '{advanced_titles[0]}' depende de esta y ya avanzó"
         titles = ", ".join(f"'{title}'" for title in advanced_titles)
         return f"No se puede reabrir: las tareas {titles} dependen de esta y ya avanzaron"
     return None
@@ -149,7 +151,7 @@ def crear_tarea(request: Request, organization_id: int, group_id: int, project_i
         return error(404, "Proyecto no encontrado")
 
     if not _is_group_lead(user, group):
-        return error(403, "Solo el group lead puede crear tareas")
+        return error(403, "Solo el líder del grupo puede crear tareas")
 
     attributes = extract_attributes(request)
     if attributes is None:
@@ -306,7 +308,7 @@ def eliminar_tarea(
         return error(404, "Tarea no encontrada")
 
     if not _is_group_lead(cast(Users, request.user), group):
-        return error(403, "Solo el group lead puede eliminar tareas")
+        return error(403, "Solo el líder del grupo puede eliminar tareas")
 
     task.delete()
     return None, 204

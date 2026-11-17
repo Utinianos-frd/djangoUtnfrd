@@ -498,7 +498,7 @@ class TestReabrirTareaBloqueante:
         status, data = self._patch_status(call, org_group.lead, a, 'pending', project_kwargs)
 
         assert status == 409
-        assert data['errors'][0]['detail'] == "No se puede reabrir: las tareas 'B' dependen de esta y ya avanzaron"
+        assert data['errors'][0]['detail'] == "No se puede reabrir: la tarea 'B' depende de esta y ya avanzó"
         a.refresh_from_db()
         assert a.status == Task.Status.DONE
         assert a.closed_at is not None

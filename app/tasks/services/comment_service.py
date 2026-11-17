@@ -60,7 +60,7 @@ def crear_comentario(
     is_lead = _is_group_lead(user, group)
     is_assigned = task.assignees.filter(id=user.id).exists()
     if not (is_lead or is_assigned):
-        return error(403, "Solo el group lead o un contributor asignado puede comentar esta tarea")
+        return error(403, "Solo el líder del grupo o un contributor asignado puede comentar esta tarea")
 
     attributes = extract_attributes(request)
     if attributes is None:

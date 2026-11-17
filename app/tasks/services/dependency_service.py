@@ -49,7 +49,7 @@ def crear_dependencia(
         return error(404, "Proyecto no encontrado")
 
     if not _is_group_lead(cast(Users, request.user), group):
-        return error(403, "Solo el group lead puede agregar dependencias")
+        return error(403, "Solo el líder del grupo puede agregar dependencias")
 
     attributes = extract_attributes(request)
     if attributes is None:
@@ -122,7 +122,7 @@ def eliminar_dependencia(
         return error(404, "Proyecto no encontrado")
 
     if not _is_group_lead(cast(Users, request.user), group):
-        return error(403, "Solo el group lead puede eliminar dependencias")
+        return error(403, "Solo el líder del grupo puede eliminar dependencias")
 
     dependency = TaskDependency.objects.filter(id=dependency_id, blocking_task__project=project).first()
     if not dependency:

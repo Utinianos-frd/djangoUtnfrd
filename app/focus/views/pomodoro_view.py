@@ -18,12 +18,14 @@ def pomodoros(request: Request, session_id: int) -> Response:
 
 @extend_schema(
     tags=['Focus'],
-    summary='Pausar / reanudar / cancelar / completar un pomodoro',
+    summary='Pausar / reanudar / cancelar / completar / cambiar de tarea un pomodoro',
     description=(
         'RF-49/50/51. Body: { "data": { "attributes": { "action": "pause" | "resume" | "cancel" | '
-        '"complete" } } }. "complete" da 409 si todavía no se cumplieron los 25 min de foco efectivo '
-        '(sin pausas, con 5 s de tolerancia). Al completar, la response trae meta.suggested_break_minutes '
-        '(5, o 15 cada 4 pomodoros consecutivos completados). Toda response incluye remaining_seconds.'
+        '"complete" | "switch_task", "task_id": <solo para switch_task> } } }. "complete" da 409 si '
+        'todavía no se cumplieron los 25 min de foco efectivo (sin pausas, con 5 s de tolerancia). '
+        '"switch_task" pasa el pomodoro en curso a otra tarea de la sesión (que no esté completada ni '
+        'bloqueada). Al completar, la response trae meta.suggested_break_minutes (5, o 15 cada 4 pomodoros '
+        'consecutivos completados). Toda response incluye remaining_seconds.'
     ),
 )
 @api_view(['PATCH'])

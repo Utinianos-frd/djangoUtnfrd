@@ -4,6 +4,7 @@ from django.utils import timezone
 from rest_framework.request import Request
 from app.users.models import Users
 from app.tasks.models import Task
+from app.tasks.services.task_service import _is_blocked
 from ..models import FocusSession, Pomodoro
 from ..serializers.start_pomodoro_serializer import StartPomodoroSerializer
 from ..serializers.pomodoro_action_serializer import PomodoroActionSerializer
@@ -110,6 +111,19 @@ def actualizar_pomodoro(request: Request, session_id: int, pomodoro_id: int) -> 
         if pomodoro.status not in (Pomodoro.Status.RUNNING, Pomodoro.Status.PAUSED):
             return error(409, "Este pomodoro ya terminó")
         close_pomodoro(pomodoro, Pomodoro.Status.CANCELLED, now)
+
+    elif action == 'switch_task':
+        if pomodoro.status not in (Pomodoro.Status.RUNNING, Pomodoro.Status.PAUSED):
+            return error(409, "Solo se puede cambiar la tarea de un pomodoro en curso")
+        task_id = serializer.validated_data['task_id']
+        task = session.tasks.filter(id=task_id).first()
+        if not task:
+            return error(400, "Esa tarea no forma parte del objetivo de esta sesión")
+        if task.status == Task.Status.DONE:
+            return error(409, "Esa tarea ya está completada")
+        if _is_blocked(task):
+            return error(409, "Esa tarea está bloqueada por otra tarea")
+        pomodoro.task_id = task_id
 
     else:  # complete
         if pomodoro.status != Pomodoro.Status.RUNNING:

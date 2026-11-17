@@ -53,6 +53,28 @@ class TestCrearComentario:
 
         assert status == 400
 
+    def test_comentario_de_2000_caracteres_se_acepta(self, call, org_group, project_kwargs, make_task):
+        task = make_task()
+
+        status, _data = call(
+            comments, 'post', '/', org_group.lead, _comment_payload(text='a' * 2000),
+            task_id=task.id, **project_kwargs,
+        )
+
+        assert status == 201
+
+    def test_comentario_de_mas_de_2000_caracteres_da_400(self, call, org_group, project_kwargs, make_task):
+        task = make_task()
+
+        status, data = call(
+            comments, 'post', '/', org_group.lead, _comment_payload(text='a' * 2001),
+            task_id=task.id, **project_kwargs,
+        )
+
+        assert status == 400
+        assert data['errors'][0]['detail'] == 'El comentario no puede superar los 2000 caracteres.'
+        assert not Comment.objects.exists()
+
     def test_tarea_inexistente_da_404(self, call, org_group, project_kwargs):
         status, _data = call(
             comments, 'post', '/', org_group.lead, _comment_payload(text='Hola'), task_id=999, **project_kwargs,

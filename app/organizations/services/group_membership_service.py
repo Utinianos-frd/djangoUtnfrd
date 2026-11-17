@@ -58,7 +58,7 @@ def agregar_miembro_grupo(request: Request, organization_id: int, group_id: int)
         return error(404, "Grupo no encontrado")
 
     if _group_role(cast(Users, request.user), group) != GroupMembership.Role.GROUP_LEAD:
-        return error(403, "Solo el group lead puede agregar miembros al grupo")
+        return error(403, "Solo el líder del grupo puede agregar miembros al grupo")
 
     attributes = extract_attributes(request)
     if attributes is None:
@@ -91,7 +91,7 @@ def cambiar_rol_miembro_grupo(
         return error(404, "Grupo no encontrado")
 
     if get_role(cast(Users, request.user), organization) != Membership.Role.OWNER:
-        return error(403, "Solo el owner puede asignar el rol de group lead")
+        return error(403, "Solo el owner puede asignar el rol de líder del grupo")
 
     if not Membership.objects.filter(organization=organization, user_id=user_id).exists():
         return error(400, "El usuario debe ser miembro de la organización")
@@ -112,7 +112,7 @@ def cambiar_rol_miembro_grupo(
     target = GroupMembership.objects.filter(group=group, user_id=user_id).first()
 
     if target and target.role == GroupMembership.Role.GROUP_LEAD and new_role != GroupMembership.Role.GROUP_LEAD:
-        return error(400, "No se puede quitar el rol de group lead directamente: asignaselo a otro miembro primero")
+        return error(400, "No se puede quitar el rol de líder del grupo directamente: asignaselo a otro miembro primero")
 
     if new_role == GroupMembership.Role.GROUP_LEAD:
         current_lead = GroupMembership.objects.filter(
@@ -140,14 +140,14 @@ def eliminar_miembro_grupo(
         return error(404, "Grupo no encontrado")
 
     if _group_role(cast(Users, request.user), group) != GroupMembership.Role.GROUP_LEAD:
-        return error(403, "Solo el group lead puede eliminar miembros del grupo")
+        return error(403, "Solo el líder del grupo puede eliminar miembros del grupo")
 
     target = GroupMembership.objects.filter(group=group, user_id=user_id).first()
     if not target:
         return error(404, "El usuario no pertenece a este grupo")
 
     if target.role == GroupMembership.Role.GROUP_LEAD:
-        return error(400, "No se puede eliminar al group lead: reasigná el rol primero")
+        return error(400, "No se puede eliminar al líder del grupo: reasigná el rol primero")
 
     target.delete()
     return None, 204
