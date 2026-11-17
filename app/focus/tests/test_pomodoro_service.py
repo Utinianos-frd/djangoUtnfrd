@@ -31,10 +31,22 @@ def act(call, focus_user, active_session):
     return _act
 
 
+FULL = Pomodoro.DURATION_MINUTES * 60
+
+
 @pytest.fixture
 def make_pomodoro(focus_user, active_session):
-    def _make_pomodoro(status=Pomodoro.Status.RUNNING, task=None):
-        return Pomodoro.objects.create(session=active_session, task=task or focus_user.task_a, status=status)
+    """elapsed_seconds: hace cuánto arrancó (started_at es auto_now_add, así que se pisa con update)."""
+
+    def _make_pomodoro(status=Pomodoro.Status.RUNNING, task=None, elapsed_seconds=0, paused_seconds=0):
+        pomodoro = Pomodoro.objects.create(session=active_session, task=task or focus_user.task_a, status=status)
+        if elapsed_seconds or paused_seconds:
+            Pomodoro.objects.filter(id=pomodoro.id).update(
+                started_at=timezone.now() - timedelta(seconds=elapsed_seconds),
+                total_paused_seconds=paused_seconds,
+            )
+            pomodoro.refresh_from_db()
+        return pomodoro
 
     return _make_pomodoro
 
@@ -128,7 +140,7 @@ class TestMaquinaDeEstados:
         assert 120 <= pomodoro.total_paused_seconds <= 121  # 30 previos + ~90 de esta pausa
 
     def test_completar_un_pomodoro_corriendo(self, act, make_pomodoro):
-        pomodoro = make_pomodoro()
+        pomodoro = make_pomodoro(elapsed_seconds=FULL)
 
         status, data = act(pomodoro, 'complete')
 
@@ -193,7 +205,7 @@ class TestDescansoSugerido:
             Pomodoro.objects.filter(id=pomodoro.id).update(started_at=now - timedelta(minutes=minutes_ago))
 
     def test_primer_pomodoro_sugiere_descanso_corto(self, act, make_pomodoro):
-        status, data = act(make_pomodoro(), 'complete')
+        status, data = act(make_pomodoro(elapsed_seconds=FULL), 'complete')
 
         assert status == 200
         assert data['meta'] == {'suggested_break_minutes': 5, 'consecutive_completed': 1}
@@ -201,7 +213,7 @@ class TestDescansoSugerido:
     def test_cuarto_seguido_sugiere_descanso_largo(self, act, make_pomodoro):
         self._complete_previous(make_pomodoro, [Pomodoro.Status.COMPLETED] * 3)
 
-        _status, data = act(make_pomodoro(), 'complete')
+        _status, data = act(make_pomodoro(elapsed_seconds=FULL), 'complete')
 
         assert data['meta'] == {'suggested_break_minutes': 15, 'consecutive_completed': 4}
 
@@ -211,7 +223,7 @@ class TestDescansoSugerido:
             [Pomodoro.Status.COMPLETED, Pomodoro.Status.COMPLETED, Pomodoro.Status.CANCELLED, Pomodoro.Status.COMPLETED],
         )
 
-        _status, data = act(make_pomodoro(), 'complete')
+        _status, data = act(make_pomodoro(elapsed_seconds=FULL), 'complete')
 
         assert data['meta'] == {'suggested_break_minutes': 5, 'consecutive_completed': 2}
 
@@ -219,3 +231,92 @@ class TestDescansoSugerido:
         _status, data = act(make_pomodoro(), 'pause')
 
         assert 'meta' not in data
+
+
+class TestCompletarRecienAlTerminar:
+    """No se puede completar antes de cumplir el foco (con 5 s de tolerancia); las pausas no cuentan."""
+
+    def test_completar_recien_iniciado_da_409(self, act, make_pomodoro):
+        pomodoro = make_pomodoro()
+
+        status, data = act(pomodoro, 'complete')
+
+        assert status == 409
+        assert data['errors'][0]['detail'] == 'El pomodoro todavía no terminó'
+        pomodoro.refresh_from_db()
+        assert pomodoro.status == Pomodoro.Status.RUNNING
+        assert pomodoro.completed_at is None
+
+    def test_dentro_de_la_tolerancia_de_5_segundos_se_acepta(self, act, make_pomodoro):
+        status, _data = act(make_pomodoro(elapsed_seconds=FULL - 4), 'complete')
+
+        assert status == 200
+
+    def test_fuera_de_la_tolerancia_da_409(self, act, make_pomodoro):
+        status, _data = act(make_pomodoro(elapsed_seconds=FULL - 30), 'complete')
+
+        assert status == 409
+
+    def test_las_pausas_no_cuentan_como_foco(self, act, make_pomodoro):
+        # 25 min desde que arrancó, pero 2 de ellos en pausa: le faltan 2 min de foco.
+        status, _data = act(make_pomodoro(elapsed_seconds=FULL, paused_seconds=120), 'complete')
+
+        assert status == 409
+
+    def test_si_el_front_se_demoro_igual_se_puede_completar(self, act, make_pomodoro):
+        status, data = act(make_pomodoro(elapsed_seconds=FULL + 600), 'complete')
+
+        assert status == 200
+        assert data['data']['attributes']['remaining_seconds'] == 0
+
+
+class TestRemainingSeconds:
+
+    def test_al_iniciar_queda_la_duracion_completa(self, call, focus_user, active_session):
+        _status, data = call(
+            pomodoros, 'post', '/', focus_user.user, _start_payload(focus_user.task_a.id), session_id=active_session.id,
+        )
+
+        assert FULL - 2 <= data['data']['attributes']['remaining_seconds'] <= FULL
+
+    def test_pausar_congela_el_restante(self, act, make_pomodoro):
+        status, data = act(make_pomodoro(elapsed_seconds=600), 'pause')
+
+        assert status == 200
+        assert FULL - 602 <= data['data']['attributes']['remaining_seconds'] <= FULL - 600
+
+    def test_reanudar_no_descuenta_el_tiempo_en_pausa(self, act, make_pomodoro):
+        # Arrancó hace 15 min, de los cuales los últimos 5 estuvo en pausa: lleva 10 min de foco.
+        pomodoro = make_pomodoro(status=Pomodoro.Status.PAUSED, elapsed_seconds=900)
+        Pomodoro.objects.filter(id=pomodoro.id).update(paused_at=timezone.now() - timedelta(seconds=300))
+
+        status, data = act(pomodoro, 'resume')
+
+        assert status == 200
+        assert FULL - 602 <= data['data']['attributes']['remaining_seconds'] <= FULL - 600
+
+    def test_cancelar_un_pausado_no_cuenta_la_pausa_como_foco(self, act, make_pomodoro):
+        pomodoro = make_pomodoro(status=Pomodoro.Status.PAUSED, elapsed_seconds=900)
+        Pomodoro.objects.filter(id=pomodoro.id).update(paused_at=timezone.now() - timedelta(seconds=300))
+
+        status, _data = act(pomodoro, 'cancel')
+
+        assert status == 200
+        pomodoro.refresh_from_db()
+        assert pomodoro.ended_at is not None
+        assert 600 <= pomodoro.focus_seconds() <= 602
+
+
+class TestPomodoroSobreTareaCompletada:
+
+    def test_tarea_done_da_409(self, call, focus_user, active_session):
+        focus_user.task_a.status = Task.Status.DONE
+        focus_user.task_a.save()
+
+        status, data = call(
+            pomodoros, 'post', '/', focus_user.user, _start_payload(focus_user.task_a.id), session_id=active_session.id,
+        )
+
+        assert status == 409
+        assert data['errors'][0]['detail'] == 'Esa tarea ya está completada'
+        assert not Pomodoro.objects.exists()

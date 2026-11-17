@@ -21,8 +21,9 @@ def pomodoros(request: Request, session_id: int) -> Response:
     summary='Pausar / reanudar / cancelar / completar un pomodoro',
     description=(
         'RF-49/50/51. Body: { "data": { "attributes": { "action": "pause" | "resume" | "cancel" | '
-        '"complete" } } }. Al completar, la response trae meta.suggested_break_minutes (5, o 15 cada '
-        '4 pomodoros consecutivos completados).'
+        '"complete" } } }. "complete" da 409 si todavía no se cumplieron los 25 min de foco efectivo '
+        '(sin pausas, con 5 s de tolerancia). Al completar, la response trae meta.suggested_break_minutes '
+        '(5, o 15 cada 4 pomodoros consecutivos completados). Toda response incluye remaining_seconds.'
     ),
 )
 @api_view(['PATCH'])
